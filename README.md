@@ -1,10 +1,10 @@
-# owncloud
-Docker Image for OwnCloud
+# nextcloud
+Docker Image for Nextcloud
 
 
 Available Apps:
 ```
-root@1fe4286762a5:/var/www/owncloud# sudo -u www-data ./occ app:list        
+root@1fe4286762a5:/var/www/nextcloud# sudo -u www-data ./occ app:list        
   - activity: 2.2.1
   - announcementcenter: 1.1.1
   - calendar: 1.0
@@ -44,5 +44,5 @@ root@1fe4286762a5:/var/www/owncloud# sudo -u www-data ./occ app:list
   - user_external: 0.4
   - pdflintview
   - user_ldap
-root@1fe4286762a5:/var/www/owncloud#
+root@1fe4286762a5:/var/www/nextcloud#
 ```

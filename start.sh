@@ -4,17 +4,17 @@ cd $INSTDIR
 
 # configure php and apache
 if test -z "$BASEPATH" -o "$BASEPATH" = "/"; then
-    sed -i '/Alias \/owncloud /d' /etc/apache2/conf-available/owncloud.conf
+    sed -i '/Alias \/nextcloud /d' /etc/apache2/conf-available/nextcloud.conf
     sed -i 's,DocumentRoot.*,DocumentRoot '$INSTDIR',' /etc/apache2/sites-available/000-default.conf
 else
-    grep -q Alias /etc/apache2/conf-available/owncloud.conf && \
-        sed -i 's,Alias *[^ ]* ,Alias '"$BASEPATH"' ,' /etc/apache2/conf-available/owncloud.conf || \
-        sed -i '0aAlias '"$BASEPATH" /etc/apache2/conf-available/owncloud.conf
+    grep -q Alias /etc/apache2/conf-available/nextcloud.conf && \
+        sed -i 's,Alias *[^ ]* ,Alias '"$BASEPATH"' ,' /etc/apache2/conf-available/nextcloud.conf || \
+        sed -i '0aAlias '"$BASEPATH" /etc/apache2/conf-available/nextcloud.conf
 fi
 if test -d /etc/php/7.0/apache2/conf.d; then
-    PHPCONF=/etc/php/7.0/apache2/conf.d/99-owncloud.ini
+    PHPCONF=/etc/php/7.0/apache2/conf.d/99-nextcloud.ini
 elif test -d /etc/php5/apache2/conf.d; then
-    PHPCONF=/etc/php5/apache2/conf.d/99-owncloud.ini
+    PHPCONF=/etc/php5/apache2/conf.d/99-nextcloud.ini
 else
     echo "**** ERROR: PHP Configuration Path Not Found" 1>&2
     exit 1
@@ -28,9 +28,9 @@ max_input_time = ${MAX_INPUT_TIME}
 max_execution_time = ${MAX_INPUT_TIME}
 EOF
 
-# configure or update owncloud
+# configure or update nextcloud
 if ! test -s config/config.php; then # initial run
-    # install owncloud
+    # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
     for ((i=10; i>0; --i)); do # database connection sometimes fails retry 10 times
@@ -72,7 +72,7 @@ if ! test -s config/config.php; then # initial run
                         if test "${a}" != "${a#*:@}"; then
                             account=${a#*:@}
                         else
-                            account=owncloud
+                            account=nextcloud
                         fi
                         src=https://github.com/${account}/${a%%:*}/releases
                     fi
@@ -106,7 +106,7 @@ if ! test -s config/config.php; then # initial run
             fi
         done
     fi
-else # upgrade owncloud
+else # upgrade nextcloud
     if ! (sudo -u www-data ./occ upgrade --no-interaction || test $? -eq 3); then
         if ! sudo -u www-data ./occ maintenance:repair --no-interaction; then
             if ! (sudo -u www-data ./occ upgrade --no-interaction || test $? -eq 3); then
@@ -117,7 +117,7 @@ else # upgrade owncloud
     fi
 fi
 
-sudo -u www-data ./occ log:owncloud --file=/proc/$$/fd/1 --enable
+sudo -u www-data ./occ log:nextcloud --file=/proc/$$/fd/1 --enable
 if test -n "$WEBROOT"; then
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
@@ -126,11 +126,11 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
-cat > /etc/cron.d/owncloud <<EOF
+cat > /etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
 @daily www-data $INSTDIR/occ files:scan --all
 EOF
-chmod +x /etc/cron.d/owncloud
+chmod +x /etc/cron.d/nextcloud
 cron
 
 if test -f /run/apache2/apache2.pid; then
