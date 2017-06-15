@@ -2,7 +2,7 @@
 # docker run -d --name nextcloud-mysql-volume mysql sleep infinity
 # docker run -d --name nextcloud-volume mwaeckerlin/nextcloud sleep infinity
 # docker run -d --name nextcloud-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=$(pwgen 20 1) --volumes-from nextcloud-mysql-volume mysql
-# docker run -d --name nextcloud -e URL="example.com" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e BASEPATH=/nextcloud --volumes-from nextcloud-volume --link nextcloud-mysql:mysql mwaeckerlin/nextcloud
+# docker run -d --name nextcloud -e URL="example.com" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e WEBROOT=/nextcloud --volumes-from nextcloud-volume --link nextcloud-mysql:mysql mwaeckerlin/nextcloud
 # docker run -d -p 80:80 -p 443:443 [...] --link nextcloud:dev.marc.waeckerlin.org%2fnextcloud mwaeckerlin/reverse-proxy
 FROM mwaeckerlin/ubuntu-base
 MAINTAINER mwaeckerlin
@@ -10,7 +10,6 @@ MAINTAINER mwaeckerlin
 EXPOSE 80
 ENV UPLOAD_MAX_FILESIZE "8G"
 ENV MAX_INPUT_TIME "3600"
-ENV BASEPATH ""
 ENV WEBROOT ""
 ENV ADMIN_USER ""
 ENV ADMIN_PWD ""
@@ -33,35 +32,24 @@ ENV INSTDIR "${INSTBASE}/nextcloud"
 ENV DATADIR "${INSTDIR}/data"
 ENV CONFDIR "${INSTDIR}/config"
 ENV APPSDIR "${INSTDIR}/apps"
-ENV SOURCE "https://download.nextcloud.com/server/releases/latest.zip"
+ENV SOURCE_FILE="latest.tar.bz2"
+ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
-RUN apt-get update && apt-get install -y apache2 libapache2-mod-php7.0 php7.0-gd php7.0-json php7.0-mysql php7.0-curl php7.0-mbstring php7.0-intl php7.0-mcrypt php-imagick php7.0-xml php7.0-zip
+RUN apt-get update && apt-get install -y bzip2 pwgen sudo apache2 libapache2-mod-php7.0 php7.0-gd php7.0-json php7.0-mysql php7.0-curl php7.0-mbstring php7.0-intl php7.0-mcrypt php-imagick php7.0-xml php7.0-zip
 RUN mkdir -p "${INSTDIR}"
-RUN wget -qOnextcloud.tar.bz2 "${SOURCE}"
+RUN wget -qO${SOURCE_FILE} "${SOURCE}"
 WORKDIR "${INSTBASE}"
-RUN tar xf /tmp/nextcloud.tar.bz2
-RUN rm /tmp/nextcloud.tar.bz2
+RUN tar xf /tmp/${SOURCE_FILE}
+RUN rm /tmp/${SOURCE_FILE}
 WORKDIR "${INSTDIR}"
-RUN cat > /etc/apache2/conf-available/nextcloud.conf <<EOF
-Alias /nextcloud "${INSTDIR}/"
-
-<Directory ${INSTDIR}/>
-  Options +FollowSymlinks
-  AllowOverride All
-
- <IfModule mod_dav.c>
-  Dav off
- </IfModule>
-
- SetEnv HOME ${INSTDIR}
- SetEnv HTTP_HOME ${INSTDIR}
-
-</Directory>
-EOF
+RUN chmod +x occ
+RUN mkdir data
+RUN chown -R www-data config apps data
 
 VOLUME $DATADIR
 VOLUME $CONFDIR
 VOLUME $APPSDIR
 WORKDIR $INSTDIR
 ADD start.sh /start.sh
+ADD nextcloud.conf /nextcloud.conf
 CMD /start.sh

@@ -3,14 +3,12 @@
 cd $INSTDIR
 
 # configure php and apache
-if test -z "$BASEPATH" -o "$BASEPATH" = "/"; then
-    sed -i '/Alias \/nextcloud /d' /etc/apache2/conf-available/nextcloud.conf
-    sed -i 's,DocumentRoot.*,DocumentRoot '$INSTDIR',' /etc/apache2/sites-available/000-default.conf
-else
-    grep -q Alias /etc/apache2/conf-available/nextcloud.conf && \
-        sed -i 's,Alias *[^ ]* ,Alias '"$BASEPATH"' ,' /etc/apache2/conf-available/nextcloud.conf || \
-        sed -i '0aAlias '"$BASEPATH" /etc/apache2/conf-available/nextcloud.conf
-fi
+CONF_FILE_CONTENT=$(eval "cat <<EOFXXXX
+$(</nextcloud.conf)
+EOFXXXX")
+cat > /etc/apache2/conf-available/nextcloud.conf<<<"${CONF_FILE_CONTENT}"
+a2enconf nextcloud
+
 if test -d /etc/php/7.0/apache2/conf.d; then
     PHPCONF=/etc/php/7.0/apache2/conf.d/99-nextcloud.ini
 elif test -d /etc/php5/apache2/conf.d; then
@@ -117,7 +115,7 @@ else # upgrade nextcloud
     fi
 fi
 
-sudo -u www-data ./occ log:nextcloud --file=/proc/$$/fd/1 --enable
+sudo -u www-data ./occ log:file --file=/proc/$$/fd/1 --enable
 if test -n "$WEBROOT"; then
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
