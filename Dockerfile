@@ -57,6 +57,5 @@ RUN chown -R www-data config apps data
 
 VOLUME $DATADIR
 VOLUME $CONFDIR
-VOLUME $APPSDIR
 WORKDIR $INSTDIR
 CMD /start.sh
