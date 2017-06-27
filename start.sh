@@ -26,6 +26,18 @@ max_input_time = ${MAX_INPUT_TIME}
 max_execution_time = ${MAX_INPUT_TIME}
 EOF
 
+if test -n "$MYSQL_ENV_MYSQL_PASSWORD"; then
+    echo "wait for mysql to become ready"
+    for ((i=0; i<20; ++i)); do
+        if nmap -p ${MYSQL_PORT_3306_TCP_PORT} ${MYSQL_PORT_3306_TCP_ADDR} \
+            | grep -q ${MYSQL_PORT_3306_TCP_PORT}'/tcp open'; then
+            echo "mysql is ready"
+            break;
+        fi
+        sleep 1
+    done
+fi
+
 # configure or update nextcloud
 if ! test -s config/config.php; then # initial run
     # install nextcloud
@@ -129,7 +141,7 @@ cat > /etc/cron.d/nextcloud <<EOF
 @daily www-data $INSTDIR/occ files:scan --all
 EOF
 chmod +x /etc/cron.d/nextcloud
-cron
+(! service cron status || service cron stop ) && service cron start
 
 if test -f /run/apache2/apache2.pid; then
     rm /run/apache2/apache2.pid;
