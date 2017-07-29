@@ -67,6 +67,10 @@ if ! test -s config/config.php; then # initial run
         echo "#### ERROR in installation, please analyse" 1>&2
         sleep infinity
     fi
+    # add debugging if required
+    if test "$DEBUG" -eq 1; then
+        sed -i "/CONFIG = array (/a'debug' => true," config/config.php
+    fi
     # download and enable missing apps
     ocver=$(sudo -u www-data ./occ -V | sed -n 's,^.*version \([.0-9]\+\).*$,\1,p')
     if test -n "$APPS"; then

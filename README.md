@@ -1,6 +1,13 @@
-# nextcloud
 Docker Image for Nextcloud
+==========================
 
+Example use with volumes and MySQL database behind a reverse proxy:
+
+    docker run -d --name nextcloud-mysql-volume mysql sleep infinity
+    docker run -d --name nextcloud-volume mwaeckerlin/nextcloud sleep infinity
+    docker run -d --name nextcloud-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=$(pwgen 20 1) --volumes-from nextcloud-mysql-volume mysql
+    docker run -d --name nextcloud -e URL="example.com" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e WEBROOT=/nextcloud --volumes-from nextcloud-volume --link nextcloud-mysql:mysql mwaeckerlin/nextcloud
+    docker run -d -p 80:80 -p 443:443 [...] --link nextcloud:dev.marc.waeckerlin.org%2fnextcloud mwaeckerlin/reverse-proxy
 
 Available Apps:
 ```
