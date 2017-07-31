@@ -24,6 +24,13 @@ upload_max_filesize = ${UPLOAD_MAX_FILESIZE}
 post_max_size = ${UPLOAD_MAX_FILESIZE}
 max_input_time = ${MAX_INPUT_TIME}
 max_execution_time = ${MAX_INPUT_TIME}
+opcache.enable=1
+opcache.enable_cli=1
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
 EOF
 
 if test -n "$MYSQL_ENV_MYSQL_PASSWORD"; then
@@ -69,7 +76,7 @@ if ! test -s config/config.php; then # initial run
     fi
     # add debugging if required
     if test "$DEBUG" -eq 1; then
-        sed -i "/CONFIG = array (/a'debug' => true," config/config.php
+        sudo -u www-data ./occ config:system:set --value true debug
     fi
     # download and enable missing apps
     ocver=$(sudo -u www-data ./occ -V | sed -n 's,^.*version \([.0-9]\+\).*$,\1,p')
@@ -132,6 +139,7 @@ else # upgrade nextcloud
 fi
 
 sudo -u www-data ./occ log:file --file=/proc/$$/fd/1 --enable
+sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
@@ -151,6 +159,7 @@ if test -f /run/apache2/apache2.pid; then
     rm /run/apache2/apache2.pid;
 fi;
 
+echo "#### READY ####"
 if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "************************************"
     echo "admin-user:     $USER"

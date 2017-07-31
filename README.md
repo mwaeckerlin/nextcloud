@@ -1,55 +1,73 @@
 Docker Image for Nextcloud
 ==========================
 
+Configuration
+-------------
+
+ - Port: `80`
+ - Volumes:
+    - `/var/www/nextcloud/data`
+    - `/var/www/nextcloud/config`
+ - Variables:
+    - `URL`: URL of the service. Should always be specified, at least if service is behind a proxy. E.g. `https://example.com/nextcloud` → `URL="example.com"`
+    - `WEBROOT`: Path in URL, must be set for proper forwarding id URL conrtains a path, e.g. `https://example.com/nextcloud` → `WEBROOT="/nextcloud"`
+    - `ADMIN_USER`: Name of the administration user. Default: `admin`
+    - `ADMIN_PWD`: Password of the administration user. Default: random (printed in the log)
+    - `APPS`: List of additional apps to install and enable, e.g. `files_external`, `user_ldap`, etc. → see https://apps.nextcloud.com/ for more
+    - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
+    - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
+    - `DEBUG`: Set to `1` to enable debugging. Default: `0`
+
+Example
+-------
+
 Example use with volumes and MySQL database behind a reverse proxy:
 
-    docker run -d --name nextcloud-mysql-volume mysql sleep infinity
-    docker run -d --name nextcloud-volume mwaeckerlin/nextcloud sleep infinity
-    docker run -d --name nextcloud-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=$(pwgen 20 1) --volumes-from nextcloud-mysql-volume mysql
-    docker run -d --name nextcloud -e URL="example.com" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e WEBROOT=/nextcloud --volumes-from nextcloud-volume --link nextcloud-mysql:mysql mwaeckerlin/nextcloud
-    docker run -d -p 80:80 -p 443:443 [...] --link nextcloud:dev.marc.waeckerlin.org%2fnextcloud mwaeckerlin/reverse-proxy
+    appname=nextcloud
+    url=cloud.example.com
+    docker pull mwaeckerlin/nextcloud
+    docker pull mysql
+    docker run -d --restart unless-stopped --name ${appname}-mysql-volume mysql sleep infinity
+    docker run -d --restart unless-stopped --name ${appname}-volume mwaeckerlin/nextcloud sleep infinity
+    docker run -d --restart unless-stopped --name ${appname}-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=$(pwgen 20 1) --volumes-from ${appname}-mysql-volume mysql
 
-Available Apps:
+Behind a reverse proxy:
+
+    docker run -d --restart unless-stopped --name ${appname} -e URL="${url}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
+    docker run -d -p 80:80 -p 443:443 [...] --link ${appname}:${url} mwaeckerlin/reverse-proxy
+
+Or when exposing the port, e.g. to `http://localhost:8000`:
+
+    docker run -d --restart unless-stopped -p 8000:80 --name ${appname} -e URL="${url}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
+
+Check the logs:
+
+    docker logs -f ${appname}
+
+It is initialied and ready, when you see in the logs:
+
 ```
-root@1fe4286762a5:/var/www/nextcloud# sudo -u www-data ./occ app:list        
-  - activity: 2.2.1
-  - announcementcenter: 1.1.1
-  - calendar: 1.0
-  - comments: 0.2
-  - contacts: 1.0.0.0
-  - dav: 0.1.5
-  - documents: 0.12.0
-  - encryption: 1.2.0
-  - external: 1.2
-  - federatedfilesharing: 0.1.0
-  - federation: 0.0.4
-  - files: 1.4.4
-  - files_antivirus: 0.8.0.1
-  - files_external: 0.5.2
-  - files_pdfviewer: 0.8
-  - files_sharing: 0.9.1
-  - files_texteditor: 2.1
-  - files_trashbin: 0.8.0
-  - files_versions: 1.2.0
-  - files_videoplayer: 0.9.8
-  - files_w2g: 0.8.2.6
-  - firstrunwizard: 1.1
-  - gallery: 14.5.0
-  - mail: 0.4.0
-  - music: 0.3.10
-  - news: 7.1.2
-  - notes: 2.0.0
-  - notifications: 0.2.3
-  - ojsxc: 3.0.0
-  - ownbackup: 0.3.8
-  - ownnote: 1.07
-  - provisioning_api: 0.4.1
-  - shorten: 0.0.15
-  - systemtags: 0.2
-  - templateeditor: 0.1
-  - updatenotification: 0.1.0
-  - user_external: 0.4
-  - pdflintview
-  - user_ldap
-root@1fe4286762a5:/var/www/nextcloud#
+#### READY ####
 ```
+
+Admin Password
+--------------
+
+How to get the admin password depends, how you started. If you specified it with `ADMIN_PWD` on command line, you have several options:
+
+Simply get the environment variable:
+
+    docker exec -it ${appname} env | grep ADMIN_PWD
+
+Get it from `docker inspect`:
+
+    docker inspect ${appname} | grep ADMIN_PWD
+
+
+Or use [my backup toolset](https://github.com/mwaeckerlin/docker-backup) to get the full command line:
+
+    ./docker-analysis.py ${appname}
+
+But if the password was not set and is generated randomly, you only find it in the log of the first start, so do not forget it:
+
+    docker logs ${appname} | grep 'admin-password'
