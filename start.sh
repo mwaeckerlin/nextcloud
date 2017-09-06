@@ -46,6 +46,7 @@ if test -n "$MYSQL_ENV_MYSQL_PASSWORD"; then
 fi
 
 # configure or update nextcloud
+sudo chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
 if ! test -s config/config.php; then # initial run
     # install nextcloud
     USER=${ADMIN_USER:-admin}
