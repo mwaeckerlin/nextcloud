@@ -18,8 +18,10 @@ Configuration
     - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
     - `DEBUG`: Set to `1` to enable debugging. Default: `0`
 
-Example
--------
+Examples
+--------
+
+### Real Live Example Proxy ###
 
 Example use with volumes and MySQL database behind a reverse proxy:
 
@@ -49,6 +51,13 @@ It is initialied and ready, when you see in the logs:
 ```
 #### READY ####
 ```
+
+### Simplest Call for Tests ###
+
+    docker rm -f test-nc-mysql
+    docker run -d --name test-nc-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=ert456 mysql
+    docker run --rm -it -p 9000:80 --name test-nc -e ADMIN_PWD=ert456 --link test-nc-mysql:mysql mwaeckerlin/nextcloud bash
+    /start.sh
 
 Admin Password
 --------------
