@@ -33,7 +33,7 @@ opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
 
-if test -n "$MYSQL_ENV_MYSQL_PASSWORD"; then
+if test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}"; then
     echo "wait for mysql to become ready"
     for ((i=0; i<20; ++i)); do
         if nmap -p ${MYSQL_PORT_3306_TCP_PORT:-3306} ${MYSQL_PORT_3306_TCP_ADDR:-mysql} \
@@ -53,11 +53,11 @@ if ! test -s config/config.php; then # initial run
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
     for ((i=10; i>0; --i)); do # database connection sometimes fails retry 10 times
         if sudo -u www-data ./occ maintenance:install \
-            --database $(test -n "$MYSQL_ENV_MYSQL_PASSWORD" && echo mysql || echo sqlite) \
-            --database-name "${MYSQL_ENV_MYSQL_DATABASE:-nextcloud}" \
+            --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
+            --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
             --database-host "mysql" \
-            --database-user "${MYSQL_ENV_MYSQL_USER:-nextcloud}" \
-            --database-pass "$MYSQL_ENV_MYSQL_PASSWORD" \
+            --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER}:-nextcloud}}" \
+            --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
             --admin-user "${USER}" \
             --admin-pass "${PASS}" \
             --data-dir "${DATADIR}" \
