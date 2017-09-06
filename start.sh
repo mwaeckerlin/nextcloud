@@ -56,7 +56,7 @@ if ! test -s config/config.php; then # initial run
             --database $(test -n "$MYSQL_ENV_MYSQL_PASSWORD" && echo mysql || echo sqlite) \
             --database-name "${MYSQL_ENV_MYSQL_DATABASE:-nextcloud}" \
             --database-host "mysql" \
-            --database-user "$MYSQL_ENV_MYSQL_USER:-nextcloud" \
+            --database-user "${MYSQL_ENV_MYSQL_USER:-nextcloud}" \
             --database-pass "$MYSQL_ENV_MYSQL_PASSWORD" \
             --admin-user "${USER}" \
             --admin-pass "${PASS}" \
