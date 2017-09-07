@@ -33,6 +33,7 @@ opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
 
+# wait for mysql to become ready
 if test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}"; then
     echo "wait ${WAIT_SECONDS_FOR_MYSQL:-300}s for mysql to become ready"
     for ((i=0; i<${WAIT_SECONDS_FOR_MYSQL:-300}; ++i)); do
