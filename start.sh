@@ -35,7 +35,7 @@ EOF
 
 if test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}"; then
     echo "wait for mysql to become ready"
-    for ((i=0; i<900; ++i)); do
+    for ((i=0; i<${WAIT_SECONDS_FOR_MYSQL:-20}; ++i)); do
         if mysql -e "select 1" -h mysql -u "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER}:-nextcloud}}" -p"${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}"; then
             echo "mysql is ready"
             break;
