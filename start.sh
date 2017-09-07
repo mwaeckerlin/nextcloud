@@ -34,9 +34,9 @@ opcache.revalidate_freq=1
 EOF
 
 if test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}"; then
-    echo "wait for mysql to become ready"
-    for ((i=0; i<${WAIT_SECONDS_FOR_MYSQL:-20}; ++i)); do
-        if mysql -e "select 1" -h mysql -u "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER}:-nextcloud}}" -p"${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}"; then
+    echo "wait ${WAIT_SECONDS_FOR_MYSQL:-300}s for mysql to become ready"
+    for ((i=0; i<${WAIT_SECONDS_FOR_MYSQL:-300}; ++i)); do
+        if mysql -e "select 1" -h mysql -u "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" -p"${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" 2> /dev/null > /dev/null; then
             echo "mysql is ready"
             break;
         fi
@@ -55,7 +55,7 @@ if ! test -s config/config.php; then # initial run
             --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
             --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
             --database-host "mysql" \
-            --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER}:-nextcloud}}" \
+            --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" \
             --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
             --admin-user "${USER}" \
             --admin-pass "${PASS}" \
