@@ -46,8 +46,10 @@ if test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}"; then
 fi
 
 # configure or update nextcloud
+echo "reset access rights"
 sudo chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
 if ! test -s config/config.php; then # initial run
+    echo "initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
@@ -73,7 +75,7 @@ if ! test -s config/config.php; then # initial run
     # check if installation was successful
     if ! test -s config/config.php; then
         echo "#### ERROR in installation, please analyse" 1>&2
-        sleep infinity
+        exit 1
     fi
     # add debugging if required
     if test "$DEBUG" -eq 1; then
@@ -129,6 +131,7 @@ if ! test -s config/config.php; then # initial run
         done
     fi
 else # upgrade nextcloud
+    echo "run necessary updates"
     if ! (sudo -u www-data ./occ upgrade --no-interaction || test $? -eq 3); then
         if ! sudo -u www-data ./occ maintenance:repair --no-interaction; then
             if ! (sudo -u www-data ./occ upgrade --no-interaction || test $? -eq 3); then
@@ -139,6 +142,7 @@ else # upgrade nextcloud
     fi
 fi
 
+echo "reset configuration"
 sudo -u www-data ./occ log:file --file=/proc/$$/fd/1 --enable
 sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
@@ -149,6 +153,7 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
+echo "start cron job"
 cat > /etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
 @daily www-data $INSTDIR/occ files:scan --all
@@ -156,6 +161,7 @@ EOF
 chmod +x /etc/cron.d/nextcloud
 (! service cron status || service cron stop ) && service cron start
 
+echo "run apache"
 if test -f /run/apache2/apache2.pid; then
     rm /run/apache2/apache2.pid;
 fi;
