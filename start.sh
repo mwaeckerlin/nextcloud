@@ -136,7 +136,7 @@ else # upgrade nextcloud
         if ! sudo -u www-data ./occ maintenance:repair --no-interaction; then
             if ! (sudo -u www-data ./occ upgrade --no-interaction || test $? -eq 3); then
                 echo "#### ERROR in upgrade, please analyse" 1>&2
-                sleep infinity
+                exit 1
             fi
         fi
     fi
