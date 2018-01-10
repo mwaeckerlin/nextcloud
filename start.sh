@@ -81,6 +81,7 @@ if [ ! -z "$(ls -A ${APPSDIR}.original)" ]; then
     else
         rsync -av --delete ${APPSDIR}.original/* ${APPSDIR}/
     fi
+    rm -rf ${APPSDIR}.original
 fi
 
 echo "start cron job"
