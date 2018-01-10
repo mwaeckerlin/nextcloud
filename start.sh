@@ -50,7 +50,7 @@ if ! test -s config/config.php; then # initial run
          --admin-user "${USER}" \
          --admin-pass "${PASS}" \
          --data-dir "${DATADIR}" \
-         --no-interaction; then
+         --no-interaction
     # check if installation was successful
     if ! test -s config/config.php; then
         echo "#### ERROR in installation, please analyse" 1>&2
@@ -73,10 +73,14 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
-if [ -z "$(ls -A $APPSDIR)" -a ! -z "$(ls -A ${APPSDIR}.original)" ]; then
-    echo "restore apps"
-    cp -a ${APPSDIR}.original/* ${APPSDIR}/
-    chown -R www-data.www-data "${APPSDIR}"
+echo "restore apps"
+if [ ! -z "$(ls -A ${APPSDIR}.original)" ]; then
+    if [ -z "$(ls -A $APPSDIR)" ]; then
+        cp -a ${APPSDIR}.original/* ${APPSDIR}/
+        chown -R www-data.www-data "${APPSDIR}"
+    else
+        rsync -av --delete ${APPSDIR}.original/* ${APPSDIR}/
+    fi
 fi
 
 echo "start cron job"
