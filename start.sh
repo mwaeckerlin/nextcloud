@@ -94,9 +94,10 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
-echo "restore apps"
 if [ -z "$(ls -A $APPSDIR)" -a ! -z "$(ls -A ${APPSDIR}.original)" ]; then
+    echo "restore apps"
     cp -a ${APPSDIR}.original/* ${APPSDIR}/
+    sudo chown -R www-data.www-data "${APPSDIR}"
 fi
 
 echo "start cron job"
