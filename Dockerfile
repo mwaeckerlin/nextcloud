@@ -9,7 +9,6 @@ ENV ADMIN_USER ""
 ENV ADMIN_PWD ""
 ENV URL ""
 ENV DEBUG "0"
-ENV WAIT_SECONDS_FOR_MYSQL "300"
 
 # compile time variables
 ENV INSTBASE "/var/www"
