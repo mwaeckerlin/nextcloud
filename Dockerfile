@@ -39,8 +39,12 @@ WORKDIR "${INSTDIR}"
 RUN chmod +x occ
 RUN mkdir data
 RUN chown -R www-data config apps data
+RUN mv $APPSDIR ${APPSDIR}.original
+RUN mkdir $APPSDIR
+RUN chown www-data.www-data $APPSDIR
 
 VOLUME $DATADIR
 VOLUME $CONFDIR
+VOLUME $APPSDIR
 WORKDIR $INSTDIR
 CMD /start.sh

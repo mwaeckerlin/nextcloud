@@ -94,6 +94,11 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
+echo "restore apps"
+if [ -z "$(ls -A $APPSDIR)" -a ! -z "$(ls -A ${APPSDIR}.original)" ]; then
+    cp -a ${APPSDIR}.original/* ${APPSDIR}/
+fi
+
 echo "start cron job"
 cat > /etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
