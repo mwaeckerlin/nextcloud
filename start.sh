@@ -36,7 +36,7 @@ EOF
 # configure or update nextcloud
 if ! test -s config/config.php; then # initial run
     echo "reset access rights"
-    sudo chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
+    chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
     echo "initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
@@ -76,7 +76,7 @@ fi
 if [ -z "$(ls -A $APPSDIR)" -a ! -z "$(ls -A ${APPSDIR}.original)" ]; then
     echo "restore apps"
     cp -a ${APPSDIR}.original/* ${APPSDIR}/
-    sudo chown -R www-data.www-data "${APPSDIR}"
+    chown -R www-data.www-data "${APPSDIR}"
 fi
 
 echo "start cron job"
