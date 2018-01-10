@@ -41,25 +41,16 @@ if ! test -s config/config.php; then # initial run
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
-    for ((i=10; i>0; --i)); do # database connection sometimes fails retry 10 times
-        if sudo -u www-data ./occ maintenance:install \
-            --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
-            --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
-            --database-host "mysql" \
-            --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" \
-            --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
-            --admin-user "${USER}" \
-            --admin-pass "${PASS}" \
-            --data-dir "${DATADIR}" \
-            --no-interaction; then
-            break
-        fi
-        echo "#### ERROR in installation; retry: $i" 1>&2
-        if test -f config/config.php; then
-            rm config/config.php
-        fi
-        sleep 5
-    done
+    sudo -u www-data ./occ maintenance:install \
+         --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
+         --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
+         --database-host "mysql" \
+         --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" \
+         --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
+         --admin-user "${USER}" \
+         --admin-pass "${PASS}" \
+         --data-dir "${DATADIR}" \
+         --no-interaction; then
     # check if installation was successful
     if ! test -s config/config.php; then
         echo "#### ERROR in installation, please analyse" 1>&2
