@@ -11,17 +11,6 @@ ENV URL ""
 ENV DEBUG "0"
 ENV WAIT_SECONDS_FOR_MYSQL "300"
 
-# default: your choice
-ENV APPS ""
-
-# recommended apps: disable activity and gallery (replace with galleryplus)
-#ENV APPS "-activity -gallery calendar contacts galleryplus:@interfasys notes user_ldap"
-
-# more examples for APPS
-#ENV APPS "calendar contacts documents music news notes ownnote"
-#ENV APPS "announcementcenter calendar contacts documents encryption external files_antivirus files_external files_w2g mail music news notes ojsxc ownbackup ownnote shorten user_external"
-#ENV APPS "announcementcenter calendar contacts documents files_w2g music news notes ojsxc ownbackup ownnote"
-
 # compile time variables
 ENV INSTBASE "/var/www"
 ENV INSTDIR "${INSTBASE}/nextcloud"

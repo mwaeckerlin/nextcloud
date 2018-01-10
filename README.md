@@ -13,7 +13,6 @@ Configuration
     - `WEBROOT`: Path in URL, must be set for proper forwarding id URL conrtains a path, e.g. `https://example.com/nextcloud` → `WEBROOT="/nextcloud"`
     - `ADMIN_USER`: Name of the administration user. Default: `admin`
     - `ADMIN_PWD`: Password of the administration user. Default: random (printed in the log)
-    - `APPS`: List of additional apps to install and enable, e.g. `files_external`, `user_ldap`, etc. → see https://apps.nextcloud.com/ for more
     - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
     - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
     - `DEBUG`: Set to `1` to enable debugging. Default: `0`
