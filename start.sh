@@ -63,7 +63,7 @@ if ! test -s config/config.php; then # initial run
 fi
 
 echo "reset configuration"
-sudo -u www-data ./occ log:file --file=/proc/$$/fd/1 --enable
+sudo -u www-data ./occ log:file --file=/proc/1/fd/1 --enable
 sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
