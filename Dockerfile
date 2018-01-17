@@ -43,6 +43,7 @@ RUN mkdir $APPSDIR
 RUN chown www-data.www-data $APPSDIR
 RUN ln -sf /proc/1/fd/1 /var/log/apache2/access.log
 RUN ln -sf /proc/1/fd/2 /var/log/apache2/error.log
+RUN ln -sf /proc/1/fd/1 /var/log/nextcloud.log
 
 VOLUME $DATADIR
 VOLUME $CONFDIR
