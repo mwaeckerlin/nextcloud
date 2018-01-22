@@ -56,13 +56,20 @@ if ! test -s config/config.php; then # initial run
         echo "#### ERROR in installation, please analyse" 1>&2
         exit 1
     fi
-    # add debugging if required
-    if test "$DEBUG" -eq 1; then
-        sudo -u www-data ./occ config:system:set --value true debug
-    fi
+else
+    sudo -u www-data ./occ maintenance:mode --off
+    sudo -u www-data ./occ upgrade
+    sudo -u www-data ./occ maintenance:repair
+    sudo -u www-data ./occ maintenance:mode --off
 fi
 
 echo "reset configuration"
+# add debugging if required
+if test "$DEBUG" -eq 1; then
+    sudo -u www-data ./occ config:system:set --value true debug
+else
+    sudo -u www-data ./occ config:system:set --value false debug
+fi
 sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
 sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
