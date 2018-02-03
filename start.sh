@@ -85,8 +85,8 @@ if [ ! -z "$(ls -A ${APPSDIR}.original)" ]; then
     if [ -z "$(ls -A $APPSDIR)" ]; then
         cp -a ${APPSDIR}.original/* ${APPSDIR}/
         chown -R www-data.www-data "${APPSDIR}"
-    else
-        rsync -av --delete ${APPSDIR}.original/* ${APPSDIR}/
+#    else
+#        rsync -av --delete ${APPSDIR}.original/* ${APPSDIR}/
     fi
     rm -rf ${APPSDIR}.original
 fi
