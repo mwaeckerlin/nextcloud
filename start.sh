@@ -57,8 +57,8 @@ if ! test -s config/config.php; then # initial run
     fi
 else
     sudo -u www-data ./occ maintenance:mode --off
-    sudo -u www-data ./occ upgrade || true
-    sudo -u www-data ./occ maintenance:repair || sudo -u www-data ./occ maintenance:repair --include-expensive || sudo -u www-data ./occ upgrade || true
+    sudo -u www-data ./occ upgrade
+    sudo -u www-data ./occ maintenance:repair || sudo -u www-data ./occ maintenance:repair --include-expensive || sudo -u www-data ./occ upgrade
     sudo -u www-data ./occ maintenance:mode --off
 fi
 
