@@ -18,8 +18,6 @@ else
     exit 1
 fi
 cat > ${PHPCONF} <<EOF
-max_input_time = ${MAX_INPUT_TIME}
-max_execution_time = ${MAX_INPUT_TIME}
 upload_max_filesize = ${UPLOAD_MAX_FILESIZE}
 post_max_size = ${UPLOAD_MAX_FILESIZE}
 max_input_time = ${MAX_INPUT_TIME}
@@ -32,6 +30,7 @@ opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
+sed -i '/php_value (upload_max_filesize|post_max_size|memory_limit|max_input_time|max_execution_time)/d' .htaccess
 
 # configure or update nextcloud
 if ! test -s config/config.php; then # initial run
@@ -64,6 +63,10 @@ else
 fi
 
 echo "reset configuration"
+if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
+    # allow more database connections
+    mysql -h mysql -u root -p${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} <<<"set global max_connections = 2000;"
+fi
 # add debugging if required
 if test "$DEBUG" -eq 1; then
     sudo -u www-data ./occ config:system:set --value true debug
