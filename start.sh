@@ -30,7 +30,11 @@ opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
-sed -i '/php_value (upload_max_filesize|post_max_size|memory_limit|max_input_time|max_execution_time)/d' .htaccess
+sed -i '
+  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/'"${UPLOAD_MAX_FILESIZE}"'/g;
+  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/'"${MAX_INPUT_TIME}"'/g;
+' .htaccess
+chown www-data.www-data .htaccess
 
 # configure or update nextcloud
 if ! test -s config/config.php; then # initial run
