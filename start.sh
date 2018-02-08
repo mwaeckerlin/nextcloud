@@ -31,8 +31,8 @@ opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
 sed -i '
-  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/'"${UPLOAD_MAX_FILESIZE}"'/g;
-  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/'"${MAX_INPUT_TIME}"'/g;
+  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/\1'"${UPLOAD_MAX_FILESIZE}"'/g;
+  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
 ' .htaccess
 chown www-data.www-data .htaccess
 
