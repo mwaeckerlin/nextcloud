@@ -37,6 +37,19 @@ EOF
 chown www-data.www-data .htaccess
 
 # configure or update nextcloud
+if [ -e "${APPSDIR}.original" ]; then
+    echo "restore apps"
+    for dir in ${APPSDIR}.original/*; do
+        target=${APPSDIR}/${dir#${APPSDIR}.original/}
+        echo "  install $target"
+        if [ -e "${target}" ]; then
+            rm -rf "${target}"
+        fi
+        mv "$dir" "$target"
+    done
+    rmdir ${APPSDIR}.original
+fi
+
 if ! test -s config/config.php; then # initial run
     echo "reset access rights"
     chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
@@ -85,19 +98,6 @@ fi
 if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set overwritehost --value "${URL}"
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
-fi
-
-if [ -e "${APPSDIR}.original" ]; then
-    echo "restore apps"
-    for dir in ${APPSDIR}.original/*; do
-        target=${APPSDIR}/${dir#${APPSDIR}.original/}
-        echo "  install $target"
-        if [ -e "${target}" ]; then
-            rm -rf "${target}"
-        fi
-        mv "$dir" "$target"
-    done
-    rmdir ${APPSDIR}.original
 fi
 
 echo "start cron job"
