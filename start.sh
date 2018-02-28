@@ -30,10 +30,10 @@ opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
-sed -i '
-  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/\1'"${UPLOAD_MAX_FILESIZE}"'/g;
-  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
-' .htaccess
+#sed -i '
+#  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/\1'"${UPLOAD_MAX_FILESIZE}"'/g;
+#  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
+#' .htaccess
 chown www-data.www-data .htaccess
 
 # configure or update nextcloud
@@ -87,15 +87,17 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
-echo "restore apps"
-if [ ! -z "$(ls -A ${APPSDIR}.original)" ]; then
-    if [ -z "$(ls -A $APPSDIR)" ]; then
-        cp -a ${APPSDIR}.original/* ${APPSDIR}/
-        chown -R www-data.www-data "${APPSDIR}"
-#    else
-#        rsync -av --delete ${APPSDIR}.original/* ${APPSDIR}/
-    fi
-    rm -rf ${APPSDIR}.original
+if [ -e "${APPSDIR}.original" ]; then
+    echo "restore apps"
+    for dir in ${APPSDIR}.original/*; do
+        target=${APPSDIR}/${dir#${APPSDIR}.original/}
+        echo "  install $target"
+        if [ -e "${target}" ]; then
+            rm -rf "${target}"
+        fi
+        mv "$dir" "$target"
+    done
+    rmdir ${APPSDIR}.original
 fi
 
 echo "start cron job"
