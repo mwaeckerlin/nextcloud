@@ -50,7 +50,8 @@ if [ -e "${APPSDIR}.original" ]; then
     rmdir ${APPSDIR}.original
 fi
 
-if ! test -s config/config.php; then # initial run
+if ! test -s config/config.php || \
+   ! (sudo -u www-data ./occ status | grep -q "installed: true") ; then # initial run
     echo "reset access rights"
     chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
     echo "initial run, setup configuration"
@@ -74,8 +75,8 @@ if ! test -s config/config.php; then # initial run
     fi
 else
     sudo -u www-data ./occ maintenance:mode --off
-    sudo -u www-data ./occ upgrade
-    sudo -u www-data ./occ maintenance:repair || sudo -u www-data ./occ maintenance:repair --include-expensive || sudo -u www-data ./occ upgrade
+    sudo -u www-data ./occ upgrade -n -vvv
+    sudo -u www-data ./occ maintenance:repair -n -vvv || sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive || sudo -u www-data ./occ upgrade -n -vvv
     sudo -u www-data ./occ maintenance:mode --off
 fi
 
