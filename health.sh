@@ -1,3 +1,3 @@
 #!/bin/bash
 
-wget -qO- http://localhost/login | grep -q 'lost-password'
+wget -qO- http://localhost/index.php/login | grep -q 'lost-password'
