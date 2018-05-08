@@ -26,7 +26,7 @@ ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
 
-RUN apt-get update && apt-get install -y gnupg bzip2 pwgen sudo apache2 libapache2-mod-php7.0 php7.0-gd php7.0-json php7.0-mysql php7.0-curl php7.0-mbstring php7.0-intl php7.0-mcrypt php-imagick php7.0-xml php7.0-zip php-apcu php-ldap rsync php-imagick libmagickcore-extra
+RUN apt-get update && apt-get install -y gnupg bzip2 pwgen sudo apache2 libapache2-mod-php7.0 php7.0-gd php7.0-json php7.0-mysql php7.0-curl php7.0-mbstring php7.0-intl php7.0-mcrypt php-imagick php7.0-xml php7.0-zip php-apcu php-ldap rsync php-imagick libmagickcore-extra wget
 RUN mkdir -p "${INSTDIR}"
 RUN wget -qO${SOURCE_FILE} ${SOURCE}
 RUN wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc
