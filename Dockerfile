@@ -39,7 +39,7 @@ RUN rm /tmp/${SOURCE_FILE} /tmp/${SOURCE_FILE}.asc /nextcloud.asc
 WORKDIR "${INSTDIR}"
 RUN chmod +x occ
 RUN mkdir data
-RUN chown -R www-data config apps data
+RUN chown -R www-data "${INSTDIR}" config apps data
 RUN mv $APPSDIR ${APPSDIR}.original
 RUN mkdir $APPSDIR
 RUN chown www-data.www-data $APPSDIR
