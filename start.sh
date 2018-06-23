@@ -46,7 +46,7 @@ if [ -e "${APPSDIR}.original" ]; then
             mv "$dir" "$target"
         fi
     done
-    rmdir ${APPSDIR}.original
+    rm -rf ${APPSDIR}.original
     echo "**** reset apps access rights"
     chown -R www-data.www-data "${APPSDIR}"
 fi
