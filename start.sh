@@ -38,23 +38,24 @@ chown www-data.www-data .htaccess
 
 # configure or update nextcloud
 if [ -e "${APPSDIR}.original" ]; then
-    echo "restore apps"
+    echo "**** restore apps"
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
-        echo "  install $target"
-        if [ -e "${target}" ]; then
-            rm -rf "${target}"
+        if ! [ -e "${target}" ]; then
+            echo "----  install $target"
+            mv "$dir" "$target"
         fi
-        mv "$dir" "$target"
     done
     rmdir ${APPSDIR}.original
+    echo "**** reset apps access rights"
+    chown -R www-data.www-data "${APPSDIR}"
 fi
 
 if ! test -s config/config.php || \
    ! (sudo -u www-data ./occ status | grep -q "installed: true") ; then # initial run
-    echo "reset access rights"
+    echo "**** reset access rights"
     chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
-    echo "initial run, setup configuration"
+    echo "**** initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
@@ -75,12 +76,14 @@ if ! test -s config/config.php || \
     fi
 else
     sudo -u www-data ./occ maintenance:mode --off
+    echo "**** upgrade"
     sudo -u www-data ./occ upgrade -n -vvv
+    echo "**** repair"
     sudo -u www-data ./occ maintenance:repair -n -vvv || sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive || sudo -u www-data ./occ upgrade -n -vvv
     sudo -u www-data ./occ maintenance:mode --off
 fi
 
-echo "reset configuration"
+echo "**** reset configuration"
 if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
     # allow more database connections
     mysql -h mysql -u root -p${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} <<<"set global max_connections = 2000;"
@@ -101,7 +104,7 @@ if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
 fi
 
-echo "start cron job"
+echo "**** start cron job"
 cat > /etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
 @daily www-data $INSTDIR/occ files:scan --all
@@ -109,7 +112,7 @@ EOF
 chmod +x /etc/cron.d/nextcloud
 (! service cron status || service cron stop ) && service cron start
 
-echo "run apache"
+echo "**** run apache"
 if test -f /run/apache2/apache2.pid; then
     rm /run/apache2/apache2.pid;
 fi;
