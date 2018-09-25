@@ -5,6 +5,7 @@ EXPOSE 80
 ENV UPLOAD_MAX_FILESIZE "8G"
 ENV MAX_INPUT_TIME "3600"
 ENV WEBROOT ""
+ENV PROXY_WEBROOT ""
 ENV ADMIN_USER ""
 ENV ADMIN_PWD ""
 ENV URL ""
@@ -26,26 +27,31 @@ ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
 
-RUN apt-get update && apt-get install -y gnupg bzip2 pwgen sudo apache2 libapache2-mod-php7.0 php7.0-gd php7.0-json php7.0-mysql php7.0-curl php7.0-mbstring php7.0-intl php7.0-mcrypt php-imagick php7.0-xml php7.0-zip php-apcu php-ldap rsync php-imagick libmagickcore-extra wget cron
-RUN mkdir -p "${INSTDIR}"
-RUN wget -qO${SOURCE_FILE} ${SOURCE}
-RUN wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc
-RUN gpg --import /nextcloud.asc
-RUN gpg --verify ${SOURCE_FILE}.asc ${SOURCE_FILE}
-
-WORKDIR "${INSTBASE}"
-RUN tar xf /tmp/${SOURCE_FILE}
-RUN rm /tmp/${SOURCE_FILE} /tmp/${SOURCE_FILE}.asc /nextcloud.asc
-WORKDIR "${INSTDIR}"
-RUN chmod +x occ
-RUN mkdir data
-RUN chown -R www-data "${INSTDIR}" config apps data
-RUN mv $APPSDIR ${APPSDIR}.original
-RUN mkdir $APPSDIR
-RUN chown www-data.www-data $APPSDIR
-RUN ln -sf /proc/1/fd/1 /var/log/apache2/access.log
-RUN ln -sf /proc/1/fd/2 /var/log/apache2/error.log
-RUN ln -sf /proc/1/fd/1 /var/log/nextcloud.log
+# libmagickcore-extra php-mcrypt
+RUN apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests -y \
+       gnupg bzip2 pwgen sudo apache2 libapache2-mod-php php-gd \
+       php-json php-mysql php-curl php-mbstring php-intl \
+       php-imagick php-xml php-zip php-apcu php-ldap \
+       rsync php-imagick wget cron mysql-client \
+ && mkdir -p "${INSTDIR}" \
+ && wget -qO${SOURCE_FILE} ${SOURCE} \
+ && wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc \
+ && gpg --import /nextcloud.asc \
+ && gpg --verify ${SOURCE_FILE}.asc ${SOURCE_FILE} \
+ && cd "${INSTBASE}" \
+ && tar xf /tmp/${SOURCE_FILE} \
+ && rm /tmp/${SOURCE_FILE} /tmp/${SOURCE_FILE}.asc /nextcloud.asc \
+ && cd "${INSTDIR}" \
+ && chmod +x occ \
+ && mkdir data \
+ && chown -R www-data "${INSTDIR}" config apps data \
+ && mv $APPSDIR ${APPSDIR}.original \
+ && mkdir $APPSDIR \
+ && chown www-data.www-data $APPSDIR \
+ && ln -sf /proc/1/fd/1 /var/log/apache2/access.log \
+ && ln -sf /proc/1/fd/2 /var/log/apache2/error.log \
+ && ln -sf /proc/1/fd/1 /var/log/nextcloud.log
 
 VOLUME $DATADIR
 VOLUME $CONFDIR

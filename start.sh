@@ -9,10 +9,9 @@ EOFXXXX")
 cat > /etc/apache2/conf-available/nextcloud.conf<<<"${CONF_FILE_CONTENT}"
 a2enconf nextcloud
 
-if test -d /etc/php/7.0/apache2/conf.d; then
-    PHPCONF=/etc/php/7.0/apache2/conf.d/99-nextcloud.ini
-elif test -d /etc/php5/apache2/conf.d; then
-    PHPCONF=/etc/php5/apache2/conf.d/99-nextcloud.ini
+PHPCONFDIR=$(ls -d /etc/php/*/apache2/conf.d | head -1)
+if test -d "${PHPCONFDIR}"; then
+    PHPCONF="${PHPCONFDIR}"/99-nextcloud.ini
 else
     echo "**** ERROR: PHP Configuration Path Not Found" 1>&2
     exit 1
@@ -95,9 +94,9 @@ else
     sudo -u www-data ./occ config:system:set --value false debug
 fi
 sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
-sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
-if test -n "$WEBROOT"; then
-    sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
+#sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
+if test -n "$PROXY_WEBROOT"; then
+    sudo -u www-data ./occ config:system:set overwritewebroot --value "${PROXY_WEBROOT}"
 fi
 if test -n "$URL"; then
     sudo -u www-data ./occ config:system:set overwritehost --value "${URL}"
@@ -124,4 +123,8 @@ if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "admin-password: $PASS"
     echo "************************************"
 fi
-apache2ctl -DFOREGROUND
+while apache2ctl -DFOREGROUND; do
+    echo "******** WARNING: Apache ended, restarting"
+done
+echo "******** ERROR: Apache failed with status $?"
+
