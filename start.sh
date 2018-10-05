@@ -41,7 +41,7 @@ if [ -e "${APPSDIR}.original" ]; then
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
         echo "----  install $target"
-        rsync -aq "${dir}/" "${target}/"
+        rsync -aq --delete "${dir}/" "${target}/"
     done
     rm -rf ${APPSDIR}.original
     echo "**** reset apps access rights"
