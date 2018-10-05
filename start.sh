@@ -43,7 +43,7 @@ if [ -e "${APPSDIR}.original" ]; then
         echo "----  install $target"
         rsync -aq "${dir}/" "${target}/"
     done
-    #rm -rf ${APPSDIR}.original
+    rm -rf ${APPSDIR}.original
     echo "**** reset apps access rights"
     chown -R www-data.www-data "${APPSDIR}"
 fi
