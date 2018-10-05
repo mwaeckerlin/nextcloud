@@ -77,6 +77,8 @@ else
     sudo -u www-data ./occ upgrade -n -vvv
     echo "**** repair"
     sudo -u www-data ./occ maintenance:repair -n -vvv || sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive || sudo -u www-data ./occ upgrade -n -vvv
+    echo "**** update database indices"
+    sudo -u www-data ./occ db:add-missing-indices
     sudo -u www-data ./occ maintenance:mode --off
 fi
 
