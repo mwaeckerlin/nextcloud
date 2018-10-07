@@ -36,16 +36,17 @@ EOF
 chown www-data.www-data .htaccess
 
 # configure or update nextcloud
+
 if [ -e "${APPSDIR}.original" ]; then
     echo "**** restore apps"
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
-        echo "----  install $target"
-        rsync -aq --delete "${dir}/" "${target}/"
+        echo "----  install $dir to $target"
+        rsync -aq --delete "${dir}/" "${target}/" || true
     done
     rm -rf ${APPSDIR}.original
     echo "**** reset apps access rights"
-    chown -R www-data.www-data "${APPSDIR}"
+    chown -R www-data.www-data "${APPSDIR}" || true
 fi
 
 if ! test -s config/config.php || \
@@ -81,6 +82,16 @@ else
     sudo -u www-data ./occ db:add-missing-indices
     sudo -u www-data ./occ maintenance:mode --off
 fi
+
+echo "**** repair broken apps"
+for app in $(ls $APPSDIR); do
+    if test -d ${APPSDIR}/${app}/${app}; then
+        echo "---- broken app: ${app}"
+        rm -rf ${APPSDIR}/${app}
+        sudo -u www-data ./occ app:install ${app}
+    fi
+done
+sudo -u www-data ./occ maintenance:mode --off
 
 echo "**** reset configuration"
 if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
