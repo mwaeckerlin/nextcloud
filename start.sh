@@ -106,12 +106,12 @@ else
 fi
 sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
 #sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
-if test -n "$PROXY_WEBROOT"; then
-    sudo -u www-data ./occ config:system:set overwritewebroot --value "${PROXY_WEBROOT}"
+if test -n "$WEBROOT"; then
+    sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
-if test -n "$URL"; then
-    sudo -u www-data ./occ config:system:set overwritehost --value "${URL}"
-    sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${URL}"
+if test -n "${HOST:-${URL}}"; then
+    sudo -u www-data ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
+    sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
 fi
 
 echo "**** start cron job"

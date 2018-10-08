@@ -9,8 +9,9 @@ Configuration
     - `/var/www/nextcloud/data`
     - `/var/www/nextcloud/config`
  - Variables:
-    - `URL`: URL of the service. Should always be specified, at least if service is behind a proxy. E.g. `https://example.com/nextcloud` → `URL="example.com"`
-    - `WEBROOT`: Path in URL, must be set for proper forwarding id URL conrtains a path, e.g. `https://example.com/nextcloud` → `WEBROOT="/nextcloud"`
+    - `HOST`: Host of the service. Should always be specified, at least if service is behind a proxy. E.g. `https://example.com/nextcloud` → `HOST="example.com"`
+    - `WEBROOT`: Path in URL, must be set for proper forwarding if URL contains a path, e.g. `https://example.com/nextcloud` → `WEBROOT="/nextcloud"`
+    - `PROTOCOL`: Protocol of your service, recommended and default is `https` → `PROTOCOL=https`
     - `ADMIN_USER`: Name of the administration user. Default: `admin`
     - `ADMIN_PWD`: Password of the administration user. Default: random (printed in the log)
     - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
@@ -25,7 +26,7 @@ Examples
 Example use with volumes and MySQL database behind a reverse proxy:
 
     appname=nextcloud
-    url=cloud.example.com
+    host=cloud.example.com
     docker pull mwaeckerlin/nextcloud
     docker pull mysql
     docker run -d --restart unless-stopped --name ${appname}-mysql-volume mysql sleep infinity
@@ -34,12 +35,12 @@ Example use with volumes and MySQL database behind a reverse proxy:
 
 Behind a reverse proxy:
 
-    docker run -d --restart unless-stopped --name ${appname} -e URL="${url}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
-    docker run -d -p 80:80 -p 443:443 [...] --link ${appname}:${url} mwaeckerlin/reverse-proxy
+    docker run -d --restart unless-stopped --name ${appname} -e HOST="${host}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
+    docker run -d -p 80:80 -p 443:443 [...] --link ${appname}:${host} mwaeckerlin/reverse-proxy
 
 Or when exposing the port, e.g. to `http://localhost:8000`:
 
-    docker run -d --restart unless-stopped -p 8000:80 --name ${appname} -e URL="${url}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
+    docker run -d --restart unless-stopped -p 8000:80 --name ${appname} -e HOST="${host}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
 
 Check the logs:
 
