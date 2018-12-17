@@ -43,7 +43,9 @@ if [ -e "${APPSDIR}.original" ]; then
         echo "----  install $dir to $target"
         rsync -qrlptD --delete "${dir}/" "${target}/" || true
     done
+    echo "----  remove ${APPSDIR}.original"
     rm -rf ${APPSDIR}.original
+    echo "----  apps updated"
 fi
 
 if ! test -s config/config.php || \
@@ -67,6 +69,7 @@ if ! test -s config/config.php || \
         echo "#### ERROR in installation, please analyse" 1>&2
         exit 1
     fi
+    echo "----  initial configuration done"
 else
     sudo -u www-data ./occ maintenance:mode --off
     echo "**** upgrade"
@@ -76,6 +79,7 @@ else
     echo "**** update database indices"
     sudo -u www-data ./occ db:add-missing-indices
     sudo -u www-data ./occ maintenance:mode --off
+    echo "----  maintenance done"
 fi
 
 echo "**** repair broken apps"
@@ -86,28 +90,36 @@ for app in $(ls $APPSDIR); do
         sudo -u www-data ./occ app:install ${app}
     fi
 done
+echo "----  broken apps repaired"
 sudo -u www-data ./occ maintenance:mode --off
 
 echo "**** reset configuration"
 if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
     # allow more database connections
+    echo "----  set maximal mysql connections"
     mysql -h mysql -u root -p${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} <<<"set global max_connections = 2000;"
 fi
 # add debugging if required
 if test "$DEBUG" -eq 1; then
+    echo "----  enable debug"
     sudo -u www-data ./occ config:system:set --value true debug
 else
+    echo "----  disable debug"
     sudo -u www-data ./occ config:system:set --value false debug
 fi
+echo "----  setup log file"
 sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
 #sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
+    echo "----  set webroot to $WEBROOT"
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
 if test -n "${HOST:-${URL}}"; then
+    echo "----  set host to ${HOST:-${URL}}"
     sudo -u www-data ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
 fi
+echo "----  configuration reset done"
 
 echo "**** start cron job"
 cat > /etc/cron.d/nextcloud <<EOF
@@ -116,6 +128,7 @@ cat > /etc/cron.d/nextcloud <<EOF
 EOF
 chmod +x /etc/cron.d/nextcloud
 (! service cron status || service cron stop ) && service cron start
+echo "----  cronjob started"
 
 echo "**** run apache"
 if test -f /run/apache2/apache2.pid; then
