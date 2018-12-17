@@ -33,7 +33,6 @@ EOF
 #  s/\(php_value *\(memory_limit\|upload_max_filesize\|post_max_size\) *\).*/\1'"${UPLOAD_MAX_FILESIZE}"'/g;
 #  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
 #' .htaccess
-chown www-data.www-data .htaccess
 
 # configure or update nextcloud
 
@@ -42,17 +41,13 @@ if [ -e "${APPSDIR}.original" ]; then
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
         echo "----  install $dir to $target"
-        rsync -aq --delete "${dir}/" "${target}/" || true
+        rsync -qrlptD --delete "${dir}/" "${target}/" || true
     done
     rm -rf ${APPSDIR}.original
-    echo "**** reset apps access rights"
-    chown -R www-data.www-data "${APPSDIR}" || true
 fi
 
 if ! test -s config/config.php || \
    ! (sudo -u www-data ./occ status | grep -q "installed: true") ; then # initial run
-    echo "**** reset access rights"
-    chown -R www-data.www-data "${CONFDIR}" "${DATADIR}" "${APPSDIR}"
     echo "**** initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}

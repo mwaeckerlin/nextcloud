@@ -48,7 +48,8 @@ RUN apt-get update \
  && chown -R www-data "${INSTDIR}" config apps data \
  && mv $APPSDIR ${APPSDIR}.original \
  && mkdir $APPSDIR \
- && chown www-data.www-data $APPSDIR \
+ && touch /etc/apache2/conf-available/nextcloud.conf \
+ && chown -R www-data.www-data $APPSDIR ${APPSDIR}.original $CONFDIR $DATADIR ${INSTDIR}/.htaccess /etc/apache2/conf-available/nextcloud.conf \
  && ln -sf /proc/1/fd/1 /var/log/apache2/access.log \
  && ln -sf /proc/1/fd/2 /var/log/apache2/error.log \
  && ln -sf /proc/1/fd/1 /var/log/nextcloud.log
