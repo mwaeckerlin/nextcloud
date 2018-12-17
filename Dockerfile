@@ -28,12 +28,12 @@ ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
 
 # libmagickcore-extra php-mcrypt
-RUN apt-get update \
- && apt-get install --no-install-recommends --no-install-suggests -y \
+RUN apt-get install --no-install-recommends --no-install-suggests -y \
        gnupg bzip2 pwgen sudo apache2 libapache2-mod-php php-gd \
        php-json php-mysql php-curl php-mbstring php-intl \
        php-imagick php-xml php-zip php-apcu php-ldap \
        rsync php-imagick wget cron mysql-client \
+ && /cleanup.sh \
  && mkdir -p "${INSTDIR}" \
  && wget -qO${SOURCE_FILE} ${SOURCE} \
  && wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc \
