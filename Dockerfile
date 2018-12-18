@@ -12,6 +12,7 @@ ENV PROTOCOL "https"
 ENV DEBUG "0"
 
 # compile time variables
+ENV CONTAINERNAME "nextcloud"
 ENV INSTBASE "/var/www"
 ENV INSTDIR "${INSTBASE}/nextcloud"
 ENV DATADIR "${INSTDIR}/data"
@@ -23,12 +24,15 @@ ENV SOURCE_FILE="latest.tar.bz2"
 ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
+ADD health.sh /health.sh
+HEALTHCHECK --interval=120s --timeout=30s --start-period=600s --retries=3 CMD /health.sh
 ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
 
 # libmagickcore-extra php-mcrypt
-RUN apt-get install --no-install-recommends --no-install-suggests -y \
+RUN apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests -y \
        gnupg bzip2 pwgen sudo apache2 libapache2-mod-php php-gd \
        php-json php-mysql php-curl php-mbstring php-intl \
        php-imagick php-xml php-zip php-apcu php-ldap \

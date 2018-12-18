@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+! test -e /tmp/ready || rm /tmp/ready
+
 cd $INSTDIR
 
 # configure php and apache
@@ -143,7 +145,6 @@ if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "admin-password: $PASS"
     echo "************************************"
 fi
-while apache2ctl -DFOREGROUND; do
-    echo "******** WARNING: Apache ended, restarting"
-done
-echo "******** ERROR: Apache failed with status $?"
+touch /tmp/ready
+apache2ctl -DFOREGROUND
+rm /tmp/ready
