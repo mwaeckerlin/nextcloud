@@ -146,5 +146,5 @@ if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "************************************"
 fi
 touch /tmp/ready
-apache2ctl -DFOREGROUND
+while : ; do apache2ctl -DFOREGROUND; done
 rm /tmp/ready
