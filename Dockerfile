@@ -25,7 +25,7 @@ ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
 ADD health.sh /health.sh
-HEALTHCHECK --interval=120s --timeout=30s --start-period=86400s --retries=3 CMD /health.sh
+HEALTHCHECK --interval=120s --timeout=30s --start-period=1800s --retries=3 CMD /health.sh
 ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
