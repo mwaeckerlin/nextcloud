@@ -119,6 +119,7 @@ if test -n "$WEBROOT"; then
 fi
 if test -n "${HOST:-${URL}}"; then
     echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  set host to ${HOST:-${URL}}"
+    sudo -u www-data ./occ config:system:set overwriteprotocol --value "${PROTOCOL:-https}"
     sudo -u www-data ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
 fi
