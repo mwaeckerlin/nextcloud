@@ -17,6 +17,9 @@ Configuration
     - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
     - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
     - `DEBUG`: Set to `1` to enable debugging. Default: `0`
+    - `MYSQL_USER`: name of the SQL user. Default: `nextcloud`
+    - `MYSQL_PASSWORD`: password of the SQL user
+    - `MYSQL_DATABASE`: name of the nextcloud database. Default: `nextcloud`
 
 Examples
 --------
