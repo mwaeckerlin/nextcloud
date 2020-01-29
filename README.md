@@ -14,6 +14,7 @@ Configuration
     - `PROTOCOL`: Protocol of your service, recommended and default is `https` → `PROTOCOL=https`
     - `ADMIN_USER`: Name of the administration user. Default: `admin`
     - `ADMIN_PWD`: Password of the administration user. Default: random (printed in the log)
+    - `MEMORY_LIMIT`: PHP memory limit. Default: `1000M`
     - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
     - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
     - `DEBUG`: Set to `1` to enable debugging. Default: `0`

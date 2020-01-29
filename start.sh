@@ -19,6 +19,7 @@ else
     exit 1
 fi
 cat > ${PHPCONF} <<EOF
+memory_limit = ${MEMORY_LIMIT:-${UPLOAD_MAX_FILESIZE}}
 upload_max_filesize = ${UPLOAD_MAX_FILESIZE}
 post_max_size = ${UPLOAD_MAX_FILESIZE}
 max_input_time = ${MAX_INPUT_TIME}
