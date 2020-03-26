@@ -79,9 +79,17 @@ else
     echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  upgrade"
     sudo -u www-data ./occ upgrade -n -vvv
     echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  repair"
-    sudo -u www-data ./occ maintenance:repair -n -vvv || sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive || sudo -u www-data ./occ upgrade -n -vvv
+    echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   standard repair"
+    if ! sudo -u www-data ./occ maintenance:repair -n -vvv; then
+        echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   failed - try to repair expensive"
+        if ! sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive; then
+            echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   failed - try to upgrade"
+            sudo -u www-data ./occ upgrade -n -vvv
+        fi
+    fi
     echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  update database indices"
     sudo -u www-data ./occ db:add-missing-indices
+    echo "**** $(date +'%Y/%m/%d %H:%M:%S'):  end maintenance"
     sudo -u www-data ./occ maintenance:mode --off
     echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  maintenance done"
 fi
