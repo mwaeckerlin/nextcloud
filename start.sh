@@ -15,7 +15,7 @@ PHPCONFDIR=$(ls -d /etc/php/*/apache2/conf.d | head -1)
 if test -d "${PHPCONFDIR}"; then
     PHPCONF="${PHPCONFDIR}"/99-nextcloud.ini
 else
-    echo "**** $(date +'%Y/%m/%d %H:%M:%S'): ERROR: PHP Configuration Path Not Found" 1>&2
+    echo "**** ERROR: PHP Configuration Path Not Found" 1>&2
     exit 1
 fi
 cat > ${PHPCONF} <<EOF
@@ -37,23 +37,26 @@ EOF
 #  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
 #' .htaccess
 
+# fix logging
+sudo -u www-data ./occ log:file --enable --file=/proc/1/fd/1 --rotate-size=0
+
 # configure or update nextcloud
 
 if [ -e "${APPSDIR}.original" ]; then
-    echo "**** $(date +'%Y/%m/%d %H:%M:%S'): restore apps"
+    echo "**** restore apps"
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
-        echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  install $dir to $target"
+        echo "----  install $dir to $target"
         rsync -qrlptD --delete "${dir}/" "${target}/" || true
     done
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  remove ${APPSDIR}.original"
+    echo "----  remove ${APPSDIR}.original"
     rm -rf ${APPSDIR}.original
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  apps updated"
+    echo "----  apps updated"
 fi
 
 if ! test -s config/config.php || \
    ! (sudo -u www-data ./occ status | grep -q "installed: true") ; then # initial run
-    echo "**** $(date +'%Y/%m/%d %H:%M:%S'): initial run, setup configuration"
+    echo "**** initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
@@ -69,86 +72,86 @@ if ! test -s config/config.php || \
          --no-interaction
     # check if installation was successful
     if ! test -s config/config.php; then
-        echo "#### $(date +'%Y/%m/%d %H:%M:%S'): ERROR in installation, please analyse" 1>&2
+        echo "#### ERROR in installation, please analyse" 1>&2
         exit 1
     fi
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  initial configuration done"
+    echo "----  initial configuration done"
 else
-    echo "**** $(date +'%Y/%m/%d %H:%M:%S'): start maintenance"
+    echo "**** start maintenance"
     sudo -u www-data ./occ maintenance:mode --off
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  upgrade"
+    echo "----  upgrade"
     sudo -u www-data ./occ upgrade -n -vvv
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  repair"
-    echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   standard repair"
+    echo "----  repair"
+    echo "....   standard repair"
     if ! sudo -u www-data ./occ maintenance:repair -n -vvv; then
-        echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   failed - try to repair expensive"
+        echo "....   failed - try to repair expensive"
         if ! sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive; then
-            echo ".... $(date +'%Y/%m/%d %H:%M:%S'):   failed - try to upgrade"
+            echo "....   failed - try to upgrade"
             sudo -u www-data ./occ upgrade -n -vvv
         fi
     fi
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  update database indices"
+    echo "----  update database indices"
     sudo -u www-data ./occ db:add-missing-indices
-    echo "**** $(date +'%Y/%m/%d %H:%M:%S'):  end maintenance"
+    echo "****  end maintenance"
     sudo -u www-data ./occ maintenance:mode --off
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  maintenance done"
+    echo "----  maintenance done"
 fi
 
-echo "**** $(date +'%Y/%m/%d %H:%M:%S'): repair broken apps"
+echo "**** repair broken apps"
 for app in $(ls $APPSDIR); do
     if test -d ${APPSDIR}/${app}/${app}; then
-        echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  broken app: ${app}"
+        echo "----  broken app: ${app}"
         rm -rf ${APPSDIR}/${app}
         sudo -u www-data ./occ app:install ${app}
     fi
 done
-echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  broken apps repaired"
+echo "----  broken apps repaired"
 sudo -u www-data ./occ maintenance:mode --off
 
-echo "**** $(date +'%Y/%m/%d %H:%M:%S'): reset configuration"
+echo "**** reset configuration"
 if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
     # allow more database connections
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  set maximal mysql connections"
+    echo "----  set maximal mysql connections"
     mysql -h mysql -u root -p${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} <<<"set global max_connections = 2000;"
 fi
 # add debugging if required
 if test "$DEBUG" -eq 1; then
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  enable debug"
+    echo "----  enable debug"
     sudo -u www-data ./occ config:system:set --value true debug
 else
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  disable debug"
+    echo "----  disable debug"
     sudo -u www-data ./occ config:system:set --value false debug
 fi
-echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  setup log file"
+echo "----  setup log file"
 sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
 #sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  set webroot to $WEBROOT"
+    echo "----  set webroot to $WEBROOT"
     sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
 if test -n "${HOST:-${URL}}"; then
-    echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  set host to ${HOST:-${URL}}"
+    echo "----  set host to ${HOST:-${URL}}"
     sudo -u www-data ./occ config:system:set overwriteprotocol --value "${PROTOCOL:-https}"
     sudo -u www-data ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
     sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
 fi
-echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  configuration reset done"
+echo "----  configuration reset done"
 
-echo "**** $(date +'%Y/%m/%d %H:%M:%S'): start cron job"
+echo "**** start cron job"
 cat > /etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
 @daily www-data $INSTDIR/occ files:scan --all
 EOF
 chmod +x /etc/cron.d/nextcloud
 (! service cron status || service cron stop ) && service cron start
-echo "---- $(date +'%Y/%m/%d %H:%M:%S'):  cronjob started"
+echo "----  cronjob started"
 
-echo "**** $(date +'%Y/%m/%d %H:%M:%S'): run apache"
+echo "**** run apache"
 if test -f /run/apache2/apache2.pid; then
     rm /run/apache2/apache2.pid;
 fi;
 
-echo "#### $(date +'%Y/%m/%d %H:%M:%S'): READY ####"
+echo "#### READY ####"
 if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "************************************"
     echo "admin-user:     $USER"
