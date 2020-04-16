@@ -37,9 +37,6 @@ EOF
 #  s/\(php_value *\(max_input_time\|max_execution_time\) *\).*/\1'"${MAX_INPUT_TIME}"'/g;
 #' .htaccess
 
-# fix logging
-sudo -u www-data ./occ log:file --enable --file=/proc/1/fd/1 --rotate-size=0
-
 # configure or update nextcloud
 
 if [ -e "${APPSDIR}.original" ]; then
