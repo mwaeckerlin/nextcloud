@@ -78,7 +78,7 @@ else
     echo "**** start maintenance"
     sudo -u www-data ./occ maintenance:mode --off
     echo "----  upgrade"
-    #sudo -u www-data ./occ upgrade -n -vvv
+    sudo -u www-data ./occ upgrade -n -vvv
     echo "----  repair"
     echo "....   standard repair"
     if ! sudo -u www-data ./occ maintenance:repair -n -vvv; then
