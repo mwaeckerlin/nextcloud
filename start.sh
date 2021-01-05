@@ -8,7 +8,7 @@ cd $INSTDIR
 CONF_FILE_CONTENT=$(eval "cat <<EOFXXXX
 $(</nextcloud.conf)
 EOFXXXX")
-cat > /etc/apache2/conf-available/nextcloud.conf<<<"${CONF_FILE_CONTENT}"
+cat >/etc/apache2/conf-available/nextcloud.conf <<<"${CONF_FILE_CONTENT}"
 a2enconf nextcloud
 
 PHPCONFDIR=$(ls -d /etc/php/*/apache2/conf.d | head -1)
@@ -18,7 +18,7 @@ else
     echo "**** ERROR: PHP Configuration Path Not Found" 1>&2
     exit 1
 fi
-cat > ${PHPCONF} <<EOF
+cat >${PHPCONF} <<EOF
 memory_limit = ${MEMORY_LIMIT:-${UPLOAD_MAX_FILESIZE}}
 upload_max_filesize = ${UPLOAD_MAX_FILESIZE}
 post_max_size = ${UPLOAD_MAX_FILESIZE}
@@ -45,28 +45,29 @@ if [ -e "${APPSDIR}.original" ]; then
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
         echo "----  install $dir to $target"
         rsync -qrlptD --delete "${dir}/" "${target}/" || true
+        chown -R www-data.www-data "$target"
     done
     echo "----  remove ${APPSDIR}.original"
     rm -rf ${APPSDIR}.original
     echo "----  apps updated"
 fi
 
-if ! test -s config/config.php || \
-   ! (sudo -u www-data ./occ status | grep -q "installed: true") ; then # initial run
+if ! test -s config/config.php ||
+    ! (sudo -u www-data ./occ status | grep -q "installed: true"); then # initial run
     echo "**** initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
     sudo -u www-data ./occ maintenance:install \
-         --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
-         --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
-         --database-host "mysql" \
-         --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" \
-         --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
-         --admin-user "${USER}" \
-         --admin-pass "${PASS}" \
-         --data-dir "${DATADIR}" \
-         --no-interaction
+        --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
+        --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
+        --database-host "mysql" \
+        --database-user "${MYSQL_ENV_MYSQL_USER:-${MYSQL_USER:-nextcloud}}" \
+        --database-pass "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" \
+        --admin-user "${USER}" \
+        --admin-pass "${PASS}" \
+        --data-dir "${DATADIR}" \
+        --no-interaction
     # check if installation was successful
     if ! test -s config/config.php; then
         echo "#### ERROR in installation, please analyse" 1>&2
@@ -88,7 +89,15 @@ else
         fi
     fi
     echo "----  update database indices"
-    sudo -u www-data ./occ db:add-missing-indices
+    sudo -u www-data ./occ -n -vvv db:add-missing-indices
+    echo "----  update database columns"
+    sudo -u www-data ./occ -n -vvv db:add-missing-columns
+    echo "----  update database filecache"
+    sudo -u www-data ./occ -n -vvv db:convert-filecache-bigint
+    echo "----  update database charset"
+    sudo -u www-data ./occ -n -vvv db:convert-mysql-charset
+    #echo "----  update database type"
+    #sudo -u www-data ./occ -n -vvv db:convert-type
     echo "****  end maintenance"
     sudo -u www-data ./occ maintenance:mode --off
     echo "----  maintenance done"
@@ -135,18 +144,18 @@ fi
 echo "----  configuration reset done"
 
 echo "**** start cron job"
-cat > /etc/cron.d/nextcloud <<EOF
+cat >/etc/cron.d/nextcloud <<EOF
 */15  *  *  *  * www-data php -f $INSTDIR/cron.php
 @daily www-data $INSTDIR/occ files:scan --all
 EOF
 chmod +x /etc/cron.d/nextcloud
-(! service cron status || service cron stop ) && service cron start
+(! service cron status || service cron stop) && service cron start
 echo "----  cronjob started"
 
 echo "**** run apache"
 if test -f /run/apache2/apache2.pid; then
-    rm /run/apache2/apache2.pid;
-fi;
+    rm /run/apache2/apache2.pid
+fi
 
 echo "#### READY ####"
 if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
@@ -156,5 +165,5 @@ if test -n "$PASS" -a "$PASS" != "$ADMIN_PWD"; then
     echo "************************************"
 fi
 touch /tmp/ready
-while : ; do apache2ctl -DFOREGROUND; done
+while :; do apache2ctl -DFOREGROUND; done
 rm /tmp/ready
