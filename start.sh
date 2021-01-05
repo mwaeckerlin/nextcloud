@@ -98,6 +98,8 @@ else
     sudo -u www-data ./occ -n -vvv db:convert-mysql-charset
     #echo "----  update database type"
     #sudo -u www-data ./occ -n -vvv db:convert-type
+    echo "----  update database primary keys"
+    sudo -u www-data ./occ db:add-missing-primary-keys
     echo "****  end maintenance"
     sudo -u www-data ./occ maintenance:mode --off
     echo "----  maintenance done"
