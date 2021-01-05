@@ -77,12 +77,8 @@ if ! test -s config/config.php ||
 else
     echo "**** start maintenance"
     sudo -u www-data ./occ maintenance:mode --off
-    #echo "----  upgrade"
-    # upgrade of workflowengine fails:
-    # 2021-01-04T23:39:31.914532628Z mrw-cloud_nextcloud.1.kmh0t19i1swt@dock09    | 2021-01-04T23:39:31+00:00 Checked for update of app "workflowengine" in appstore
-    # 2021-01-04T23:39:36.676205468Z mrw-cloud_nextcloud.1.kmh0t19i1swt@dock09    | An unhandled exception has been thrown:
-    # 2021-01-04T23:39:36.678939821Z mrw-cloud_nextcloud.1.kmh0t19i1swt@dock09    | Error: Interface 'OCP\AppFramework\Bootstrap\IBootstrap' not found in /var/www/nextcloud/apps/user_status/lib/AppInfo/Application.php:48
-    # sudo -u www-data ./occ upgrade -n -vvv
+    echo "----  upgrade"
+    sudo -u www-data ./occ upgrade -n -vvv
     echo "----  repair"
     echo "....   standard repair"
     if ! sudo -u www-data ./occ maintenance:repair -n -vvv; then
