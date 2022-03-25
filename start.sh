@@ -53,12 +53,12 @@ if [ -e "${APPSDIR}.original" ]; then
 fi
 
 if ! test -s config/config.php ||
-    ! (sudo -u www-data ./occ status | grep -q "installed: true"); then # initial run
+    ! (sudo -u www-data php --define apc.enable_cli=1 ./occ status | grep -q "installed: true"); then # initial run
     echo "**** initial run, setup configuration"
     # install nextcloud
     USER=${ADMIN_USER:-admin}
     PASS=${ADMIN_PWD:-$(pwgen 20 1)}
-    sudo -u www-data ./occ maintenance:install \
+    sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:install \
         --database $(test -n "${MYSQL_ENV_MYSQL_PASSWORD:-$MYSQL_PASSWORD}" && echo mysql || echo sqlite) \
         --database-name "${MYSQL_ENV_MYSQL_DATABASE:-${MYSQL_DATABASE:-nextcloud}}" \
         --database-host "mysql" \
@@ -76,32 +76,32 @@ if ! test -s config/config.php ||
     echo "----  initial configuration done"
 else
     echo "**** start maintenance"
-    sudo -u www-data ./occ maintenance:mode --off
+    sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:mode --off
     echo "----  upgrade"
-    sudo -u www-data ./occ upgrade -n -vvv
+    sudo -u www-data php --define apc.enable_cli=1 ./occ upgrade -n -vvv
     echo "----  repair"
     echo "....   standard repair"
-    if ! sudo -u www-data ./occ maintenance:repair -n -vvv; then
+    if ! sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:repair -n -vvv; then
         echo "....   failed - try to repair expensive"
-        if ! sudo -u www-data ./occ maintenance:repair -n -vvv --include-expensive; then
+        if ! sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:repair -n -vvv --include-expensive; then
             echo "....   failed - try to upgrade"
-            sudo -u www-data ./occ upgrade -n -vvv
+            sudo -u www-data php --define apc.enable_cli=1 ./occ upgrade -n -vvv
         fi
     fi
     echo "----  update database indices"
-    sudo -u www-data ./occ -n -vvv db:add-missing-indices
+    sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:add-missing-indices
     echo "----  update database columns"
-    sudo -u www-data ./occ -n -vvv db:add-missing-columns
+    sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:add-missing-columns
     echo "----  update database filecache"
-    sudo -u www-data ./occ -n -vvv db:convert-filecache-bigint
+    sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-filecache-bigint
     echo "----  update database charset"
-    sudo -u www-data ./occ -n -vvv db:convert-mysql-charset
+    sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-mysql-charset
     #echo "----  update database type"
-    #sudo -u www-data ./occ -n -vvv db:convert-type
+    #sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-type
     echo "----  update database primary keys"
-    sudo -u www-data ./occ db:add-missing-primary-keys
+    sudo -u www-data php --define apc.enable_cli=1 ./occ db:add-missing-primary-keys
     echo "****  end maintenance"
-    sudo -u www-data ./occ maintenance:mode --off
+    sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:mode --off
     echo "----  maintenance done"
 fi
 
@@ -110,11 +110,11 @@ for app in $(ls $APPSDIR); do
     if test -d ${APPSDIR}/${app}/${app}; then
         echo "----  broken app: ${app}"
         rm -rf ${APPSDIR}/${app}
-        sudo -u www-data ./occ app:install ${app}
+        sudo -u www-data php --define apc.enable_cli=1 ./occ app:install ${app}
     fi
 done
 echo "----  broken apps repaired"
-sudo -u www-data ./occ maintenance:mode --off
+sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:mode --off
 
 echo "**** reset configuration"
 if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
@@ -125,23 +125,23 @@ fi
 # add debugging if required
 if test "$DEBUG" -eq 1; then
     echo "----  enable debug"
-    sudo -u www-data ./occ config:system:set --value true debug
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set --value true debug
 else
     echo "----  disable debug"
-    sudo -u www-data ./occ config:system:set --value false debug
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set --value false debug
 fi
 echo "----  setup log file"
-sudo -u www-data ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
-#sudo -u www-data ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
+sudo -u www-data php --define apc.enable_cli=1 ./occ log:file --enable --file=/var/log/nextcloud.log --rotate-size=0
+#sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set memcache.local --value '\OC\Memcache\APCu'
 if test -n "$WEBROOT"; then
     echo "----  set webroot to $WEBROOT"
-    sudo -u www-data ./occ config:system:set overwritewebroot --value "${WEBROOT}"
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set overwritewebroot --value "${WEBROOT}"
 fi
 if test -n "${HOST:-${URL}}"; then
     echo "----  set host to ${HOST:-${URL}}"
-    sudo -u www-data ./occ config:system:set overwriteprotocol --value "${PROTOCOL:-https}"
-    sudo -u www-data ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
-    sudo -u www-data ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set overwriteprotocol --value "${PROTOCOL:-https}"
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set overwritehost --value "${HOST:-${URL}}"
+    sudo -u www-data php --define apc.enable_cli=1 ./occ config:system:set trusted_domains 1 --value "${HOST:-${URL}}"
 fi
 echo "----  configuration reset done"
 
