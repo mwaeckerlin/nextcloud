@@ -1,5 +1,4 @@
 FROM mwaeckerlin/ubuntu-base
-MAINTAINER mwaeckerlin
 
 EXPOSE 80
 ENV MEMORY_LIMIT "1000M"
@@ -26,7 +25,7 @@ ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
 ADD health.sh /health.sh
-HEALTHCHECK --interval=600s --timeout=300s --start-period=3600s --retries=6 CMD /health.sh
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=240 CMD /health.sh
 ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
@@ -37,7 +36,7 @@ RUN apt-get update \
        gnupg bzip2 pwgen sudo apache2 libapache2-mod-php php-gd \
        php-json php-mysql php-curl php-mbstring php-intl \
        php-imagick php-xml php-zip php-apcu php-ldap \
-       rsync php-imagick wget cron mysql-client \
+       rsync php-imagick wget cron mysql-client php-bcmath php-gmp \
  && /cleanup.sh \
  && mkdir -p "${INSTDIR}" \
  && wget -qO${SOURCE_FILE} ${SOURCE} \
