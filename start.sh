@@ -96,8 +96,8 @@ else
     sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-filecache-bigint
     echo "----  update database charset"
     sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-mysql-charset
-    echo "----  update database type"
-    sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-type
+    #echo "----  update database type"
+    #sudo -u www-data php --define apc.enable_cli=1 ./occ -n -vvv db:convert-type
     #echo "----  update database primary keys"
     #sudo -u www-data php --define apc.enable_cli=1 ./occ db:add-missing-primary-keys
     echo "****  end maintenance"
