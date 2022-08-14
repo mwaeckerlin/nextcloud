@@ -19,8 +19,6 @@ ENV DATADIR "${INSTDIR}/data"
 ENV CONFDIR "${INSTDIR}/config"
 ENV APPSDIR "${INSTDIR}/apps"
 ENV SOURCE_FILE="latest.tar.bz2"
-# test if 13.0.0 is fixed: https://github.com/nextcloud/server/issues/8240
-#ENV SOURCE_FILE="nextcloud-12.0.5.tar.bz2"
 ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
