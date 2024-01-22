@@ -11,7 +11,7 @@ ENV HOST ""
 ENV PROTOCOL "https"
 ENV DEBUG "0"
 
-# compile time variables
+# compile time variables 
 ENV CONTAINERNAME "nextcloud"
 ENV INSTBASE "/var/www"
 ENV INSTDIR "${INSTBASE}/nextcloud"
