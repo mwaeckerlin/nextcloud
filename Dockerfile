@@ -11,14 +11,14 @@ ENV HOST ""
 ENV PROTOCOL "https"
 ENV DEBUG "0"
 
-# compile time variables 
+# compile time variables
 ENV CONTAINERNAME "nextcloud"
 ENV INSTBASE "/var/www"
 ENV INSTDIR "${INSTBASE}/nextcloud"
 ENV DATADIR "${INSTDIR}/data"
 ENV CONFDIR "${INSTDIR}/config"
 ENV APPSDIR "${INSTDIR}/apps"
-ENV SOURCE_FILE="latest-26.tar.bz2"
+ENV SOURCE_FILE="latest-27.tar.bz2"
 ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
