@@ -44,8 +44,11 @@ if [ -e "${APPSDIR}.original" ]; then
     for dir in ${APPSDIR}.original/*; do
         target=${APPSDIR}/${dir#${APPSDIR}.original/}
         echo "----  install $dir to $target"
+        if test -e "${target}/"; then
+            chown -R www-data:www-data "$target"
+        fi
         rsync -qrlptD --delete "${dir}/" "${target}/" || true
-        chown -R www-data.www-data "$target"
+        chown -R www-data:www-data "$target"
     done
     echo "----  remove ${APPSDIR}.original"
     rm -rf ${APPSDIR}.original

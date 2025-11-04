@@ -2,7 +2,7 @@
 
 git checkout master
 git pull
-for i in {13..32}; do
+for i in {26..32}; do
     git checkout $i 2>/dev/null || git checkout -b $i
     git pull origin $i
     git reset --hard origin/master
