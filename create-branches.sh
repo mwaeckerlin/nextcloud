@@ -2,7 +2,7 @@
 
 git checkout master
 git pull
-for i in {26..32}; do
+for i in {25..26}; do
     export VERSION=latest
     if [ $i -lt 31 ]; then
         export VERSION=jammy
