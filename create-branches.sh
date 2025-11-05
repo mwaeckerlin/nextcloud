@@ -2,7 +2,7 @@
 
 git checkout master
 git pull
-for i in {25..26}; do
+for i in {25..25}; do
     export VERSION=latest
     if [ $i -lt 31 ]; then
         export VERSION=jammy
@@ -10,7 +10,7 @@ for i in {25..26}; do
     git checkout $i 2>/dev/null || git checkout -b $i
     git pull origin $i
     git reset --hard origin/master
-    sed -i 's/ARG VERSION="latest.*"/ARG VERSION="'$i'"/g' Dockerfile
+    sed -i 's/ARG VERSION="latest"/ARG VERSION="'$VERSION'"/g' Dockerfile
     sed -i 's/ENV SOURCE_FILE="latest.*"/ENV SOURCE_FILE="latest-'$i'.tar.bz2"/g' Dockerfile
     date > rebuilt
     git add .

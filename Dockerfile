@@ -1,4 +1,4 @@
-ARG VERSION=latest
+ARG VERSION="latest"
 FROM mwaeckerlin/ubuntu-base:${VERSION}
 
 EXPOSE 80
