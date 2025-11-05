@@ -1,4 +1,5 @@
-FROM mwaeckerlin/ubuntu-base
+ARG VERSION=latest
+FROM mwaeckerlin/ubuntu-base:${VERSION}
 
 EXPOSE 80
 ENV MEMORY_LIMIT "1000M"
