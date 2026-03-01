@@ -8,13 +8,13 @@ for i in {25..33}; do
         export VERSION=jammy
     fi
     git checkout $i 2>/dev/null || git checkout -b $i
-    git pull origin $i
+    git fetch origin $i
     git reset --hard origin/master
     sed -i 's/ARG VERSION="latest"/ARG VERSION="'$VERSION'"/g' Dockerfile
     sed -i 's/ENV SOURCE_FILE="latest.*"/ENV SOURCE_FILE="latest-'$i'.tar.bz2"/g' Dockerfile
     date > rebuilt
     git add .
-    git commit --reset-author -m "Update to latest-$i"
+    git commit -m "Update to latest-$i"
     git push -f origin $i
 done
 git checkout master
