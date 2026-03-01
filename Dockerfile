@@ -1,4 +1,4 @@
-ARG VERSION="latest"
+ARG VERSION="jammy"
 FROM mwaeckerlin/ubuntu-base:${VERSION}
 
 EXPOSE 80
@@ -19,7 +19,7 @@ ENV INSTDIR "${INSTBASE}/nextcloud"
 ENV DATADIR "${INSTDIR}/data"
 ENV CONFDIR "${INSTDIR}/config"
 ENV APPSDIR "${INSTDIR}/apps"
-ENV SOURCE_FILE="latest.tar.bz2"
+ENV SOURCE_FILE="latest-28.tar.bz2"
 ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
 
