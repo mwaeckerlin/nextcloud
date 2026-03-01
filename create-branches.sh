@@ -14,7 +14,7 @@ for i in {25..33}; do
     sed -i 's/ENV SOURCE_FILE="latest.*"/ENV SOURCE_FILE="latest-'$i'.tar.bz2"/g' Dockerfile
     date > rebuilt
     git add .
-    git commit -m "Update to latest-$i"
+    git commit --reset-author -m "Update to latest-$i"
     git push -f origin $i
 done
 git checkout master
