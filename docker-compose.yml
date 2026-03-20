@@ -1,0 +1,79 @@
+services:
+  nextcloud-nginx:
+    extends:
+      file: ./nginx/docker-compose.yml
+      service: nextcloud-nginx
+    environment:
+      PHP_FPM_HOST: nextcloud-php-fpm
+    networks:
+      - php-network
+
+  nextcloud-php-fpm:
+    extends:
+      file: ./php-fpm/docker-compose.yml
+      service: nextcloud-php-fpm
+    environment:
+      HOST: ""
+      PROTOCOL: https
+      ADMIN_USER: admin
+      WEBROOT: ""
+      DEBUG: "0"
+      MYSQL_HOST: nextcloud-db
+      MYSQL_USER: nextcloud
+      MYSQL_DATABASE: nextcloud
+    secrets:
+      - nextcloud_db_password
+      - nextcloud_admin_password
+    volumes:
+      - nc-data:/app/data
+      - nc-config:/app/config
+      - nc-apps:/app/apps
+    depends_on:
+      access-fix:
+        condition: service_completed_successfully
+      nextcloud-db:
+        condition: service_started
+    networks:
+      - php-network
+      - db-network
+
+  nextcloud-db:
+    image: mariadb
+    environment:
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD_FILE: /run/secrets/nextcloud_db_password
+      MYSQL_RANDOM_ROOT_PASSWORD: yes
+    secrets:
+      - nextcloud_db_password
+    volumes:
+      - nc-dbdata:/var/lib/mysql
+    networks:
+      - db-network
+
+  access-fix:
+    image: mwaeckerlin/allow-write-access
+    volumes:
+      - nc-data:/app/data
+      - nc-config:/app/config
+      - nc-apps:/app/apps
+
+secrets:
+  nextcloud_db_password:
+    external: true
+  nextcloud_admin_password:
+    external: true
+
+volumes:
+  nc-data:
+  nc-config:
+  nc-apps:
+  nc-dbdata:
+
+networks:
+  php-network:
+    driver_opts:
+      encrypted: 1
+  db-network:
+    driver_opts:
+      encrypted: 1

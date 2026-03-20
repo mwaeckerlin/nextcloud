@@ -1,86 +1,280 @@
-Docker Image for Nextcloud
-==========================
+# Minimalistic Secure Nextcloud Docker Images
 
-Configuration
--------------
+Lean, hardened Nextcloud stack with two images:
 
- - Port: `80`
- - Volumes:
-    - `/var/www/nextcloud/data`
-    - `/var/www/nextcloud/config`
- - Variables:
-    - `HOST`: Host of the service. Should always be specified, at least if service is behind a proxy. E.g. `https://example.com/nextcloud` → `HOST="example.com"`
-    - `WEBROOT`: Path in URL, must be set for proper forwarding if URL contains a path, e.g. `https://example.com/nextcloud` → `WEBROOT="/nextcloud"`
-    - `PROTOCOL`: Protocol of your service, recommended and default is `https` → `PROTOCOL=https`
-    - `ADMIN_USER`: Name of the administration user. Default: `admin`
-    - `ADMIN_PWD`: Password of the administration user. Default: random (printed in the log)
-    - `MEMORY_LIMIT`: PHP memory limit. Default: `1000M`
-    - `UPLOAD_MAX_FILESIZE`: Maximum size of files to upload. Default: `8G`
-    - `MAX_INPUT_TIME`: Timeout for apache in seconds , maximum response time. Dafault: `3600`
-    - `DEBUG`: Set to `1` to enable debugging. Default: `0`
-    - `MYSQL_USER`: name of the SQL user. Default: `nextcloud`
-    - `MYSQL_PASSWORD`: password of the SQL user
-    - `MYSQL_DATABASE`: name of the nextcloud database. Default: `nextcloud`
+- [mwaeckerlin/nextcloud-nginx]: NGINX Nextcloud frontend in only ??MB
+- [mwaeckerlin/nextcloud]: PHP‑FPM Nextcloud backend in only ??MB
 
-Examples
---------
+This splitting is in accordance to Docker philosophy of having only one server process per image and to NGINX which splits PHP processing into a separate service. It therefore also follows strong microservice architecture.
 
-### Real Live Example Proxy ###
+Both together are the most lean and secure images for Nextcloud:
+ - extremely small size, minimalistic dependencies
+ - no shell, only the server command
+ - small attack surface
+ - starts as non-root user
+ - configuration and secrets hidden in the backend service only
+ - all PHP files are empty stubs in the NGINX frontend
+ - passwords never in environment variables, delivered as Docker secrets
 
-Example use with volumes and MySQL database behind a reverse proxy:
+??MB is mostly the size of the Nextcloud distribution itself, stored in both images.
 
-    appname=nextcloud
-    host=cloud.example.com
-    docker pull mwaeckerlin/nextcloud
-    docker pull mysql
-    docker run -d --restart unless-stopped --name ${appname}-mysql-volume mysql sleep infinity
-    docker run -d --restart unless-stopped --name ${appname}-volume mwaeckerlin/nextcloud sleep infinity
-    docker run -d --restart unless-stopped --name ${appname}-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=$(pwgen 20 1) --volumes-from ${appname}-mysql-volume mysql
+Compared to the official [nextcloud] image, this package has:
+ - Less attack surface.
+ - Better encapsulation.
+ - Running as non-privileged user.
+ - Much smaller: ~??MB (nginx) + ~??MB (php-fpm) vs. ~??MB for the official fpm-based image.
+ - Clear segmentation: only NGINX can reach PHP, only PHP can reach the DB; networks are isolated and marked `encrypted` (e.g. when run in Docker Swarm).
+ - Headless: no shell, no package manager at runtime.
+ - Configurable via environment (NGINX through envwrap templates, Nextcloud via `custom.config.php` reading `getenv()`).
+ - No Nextcloud PHP file available in NGINX frontend, all PHP files emptied.
+ - Passwords never exposed: delivered as Docker secrets, mounted as read-only tmpfs inside containers.
 
-Behind a reverse proxy:
 
-    docker run -d --restart unless-stopped --name ${appname} -e HOST="${host}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
-    docker run -d -p 80:80 -p 443:443 [...] --link ${appname}:${host} mwaeckerlin/reverse-proxy
+## Volumes / Persistence
 
-Or when exposing the port, e.g. to `http://localhost:8000`:
+All mutable Nextcloud data lives in three directories:
 
-    docker run -d --restart unless-stopped -p 8000:80 --name ${appname} -e HOST="${host}" -e UPLOAD_MAX_FILESIZE=16G -e MAX_INPUT_TIME=7200 -e ADMIN_PWD=$(pwgen 20 1) --volumes-from ${appname}-volume --link ${appname}-mysql:mysql mwaeckerlin/nextcloud
+| Mount in container | Docker volume | Content                    |
+|--------------------|---------------|----------------------------|
+| `/app/data`        | `nc-data`     | User files and uploads     |
+| `/app/config`      | `nc-config`   | `config.php` and fragments |
+| `/app/apps`        | `nc-apps`     | User-installed apps        |
 
-Check the logs:
+**Permissions** on the volumes: the runtime user comes from the base images and is not root. The helper service `access-fix` (based on `mwaeckerlin/allow-write-access`) runs once at startup to set the correct ownership; after that the volumes keep their owner.
 
-    docker logs -f ${appname}
+**First-run initialization**: on first start, Docker initializes the `nc-config` volume from the image content of `/app/config`. This seeds two PHP config files:
+- `autoconfig.php`: consumed by Nextcloud on the first web request to perform a fully headless installation (reads DB credentials from Docker secrets, admin credentials from the secret or auto-generates them).
+- `custom.config.php`: a persistent config fragment always loaded alongside `config.php`; reads `HOST`, `PROTOCOL`, `WEBROOT`, `DEBUG` from environment variables at every request.
 
-It is initialied and ready, when you see in the logs:
 
+## Secrets
+
+Passwords are delivered as Docker secrets — never as plain environment variables. They are mounted read-only as tmpfs files at `/run/secrets/` and never appear in `docker inspect` or process listings.
+
+Two secrets are required:
+
+| Secret name              | Used by                               | Purpose                        |
+|--------------------------|---------------------------------------|--------------------------------|
+| `nextcloud_db_password`  | `nextcloud-php-fpm`, `nextcloud-db`   | MariaDB password               |
+| `nextcloud_admin_password` | `nextcloud-php-fpm`                 | Initial Nextcloud admin password |
+
+### Creating secrets
+
+```sh
+printf "strong-db-password"    | docker secret create nextcloud_db_password -
+printf "strong-admin-password" | docker secret create nextcloud_admin_password -
 ```
-#### READY ####
+
+Use `printf` instead of `echo` to avoid a trailing newline in the secret value.
+
+If `nextcloud_admin_password` is absent or empty, a random password is generated and written to the container log:
+
+```sh
+docker service logs nextcloud_nextcloud-php-fpm | grep 'generated admin password'
 ```
 
-### Simplest Call for Tests ###
 
-    docker rm -f test-nc-mysql
-    docker run -d --name test-nc-mysql -e MYSQL_ROOT_PASSWORD=$(pwgen 20 1) -e MYSQL_DATABASE=nextcloud -e MYSQL_USER=nextcloud -e MYSQL_PASSWORD=ert456 mysql
-    docker run --rm -it -p 9000:80 --name test-nc -e ADMIN_PWD=ert456 --link test-nc-mysql:mysql mwaeckerlin/nextcloud bash
-    /start.sh
+## Environment Variables
 
-Admin Password
---------------
+- **nextcloud-nginx**
+  - `PHP_FPM_HOST` (default `php-fpm`): upstream FastCGI host; set to `nextcloud-php-fpm` in the compose setup.
+  - `PHP_FPM_PORT` (default `9000`): upstream FastCGI port.
+  - `ROOT` (default `/app`): document root served by NGINX.
 
-How to get the admin password depends, how you started. If you specified it with `ADMIN_PWD` on command line, you have several options:
-
-Simply get the environment variable:
-
-    docker exec -it ${appname} env | grep ADMIN_PWD
-
-Get it from `docker inspect`:
-
-    docker inspect ${appname} | grep ADMIN_PWD
+- **nextcloud-php-fpm**
+  - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
+  - `HOST`: public hostname (e.g. `cloud.example.com`); sets `overwritehost` and `trusted_domains`.
+  - `PROTOCOL`: public protocol; default `https`.
+  - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot`.
+  - `DEBUG`: set to `1` to enable Nextcloud debug mode; default `0`.
+  - `MYSQL_HOST`: database hostname; default `mysql`, set to `nextcloud-db` in the compose setup.
+  - `MYSQL_USER`: database user; default `nextcloud`.
+  - `MYSQL_DATABASE`: database name; default `nextcloud`.
 
 
-Or use [my backup toolset](https://github.com/mwaeckerlin/docker-backup) to get the full command line:
+## Docker Compose Setup
 
-    ./docker-analysis.py ${appname}
+We will have the following network setup:
 
-But if the password was not set and is generated randomly, you only find it in the log of the first start, so do not forget it:
+```mermaid
+flowchart LR
+    browser["Browser\nhttp://localhost:8080"]
+    nginx["nextcloud-nginx"]
+    php["nextcloud-php-fpm"]
+    db["nextcloud-db"]
+    data["nc-data"]
+    config["nc-config"]
+    apps["nc-apps"]
+    sql["nc-dbdata"]
+    sec1["nextcloud_db_password"]
+    sec2["nextcloud_admin_password"]
 
-    docker logs ${appname} | grep 'admin-password'
+    browser --> nginx
+    nginx -->|FastCGI| php
+    php -->|SQL| db
+
+    data --- php
+    config --- php
+    apps --- php
+    sql --- db
+
+    data ---|update access rights at startup| access-fix
+    config ---|update access rights at startup| access-fix
+    apps ---|update access rights at startup| access-fix
+
+    sec1 --- php
+    sec1 --- db
+    sec2 --- php
+
+    subgraph php-net ["Encrypted Network\nphp-network"]
+      nginx
+      php
+    end
+
+    subgraph db-net ["Encrypted Network\ndb-network"]
+      php
+      db
+    end
+
+    subgraph volumes ["Persistent Storage Volumes"]
+      data
+      config
+      apps
+      sql
+    end
+
+    subgraph secrets ["Docker Secrets (encrypted)"]
+      sec1
+      sec2
+    end
+```
+
+Create secrets first (once per swarm):
+
+```sh
+printf "strong-db-password"    | docker secret create nextcloud_db_password -
+printf "strong-admin-password" | docker secret create nextcloud_admin_password -
+```
+
+Complete and secure `docker-compose.yml`:
+
+```yaml
+services:
+  nextcloud-nginx:
+    image: mwaeckerlin/nextcloud-nginx
+    environment:
+      PHP_FPM_HOST: nextcloud-php-fpm
+    ports:
+      - "8080:8080"
+    networks:
+      - php-network
+
+  nextcloud-php-fpm:
+    image: mwaeckerlin/nextcloud
+    environment:
+      HOST: cloud.example.com
+      PROTOCOL: https
+      ADMIN_USER: admin
+      MYSQL_HOST: nextcloud-db
+      MYSQL_USER: nextcloud
+      MYSQL_DATABASE: nextcloud
+    secrets:
+      - nextcloud_db_password
+      - nextcloud_admin_password
+    volumes:
+      - nc-data:/app/data
+      - nc-config:/app/config
+      - nc-apps:/app/apps
+    networks:
+      - php-network
+      - db-network
+    depends_on:
+      - access-fix
+
+  nextcloud-db:
+    image: mariadb
+    environment:
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD_FILE: /run/secrets/nextcloud_db_password
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    secrets:
+      - nextcloud_db_password
+    volumes:
+      - nc-dbdata:/var/lib/mysql
+    networks:
+      - db-network
+
+  access-fix:
+    image: mwaeckerlin/allow-write-access
+    volumes:
+      - nc-data:/app/data
+      - nc-config:/app/config
+      - nc-apps:/app/apps
+
+secrets:
+  nextcloud_db_password:
+    external: true
+  nextcloud_admin_password:
+    external: true
+
+volumes:
+  nc-data:
+  nc-config:
+  nc-apps:
+  nc-dbdata:
+
+networks:
+  php-network:
+    driver_opts:
+      encrypted: "1"
+  db-network:
+    driver_opts:
+      encrypted: "1"
+```
+
+Service roles:
+- [mwaeckerlin/nextcloud-nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.
+- [mwaeckerlin/nextcloud]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request.
+- `nextcloud-db`: MariaDB database; reachable only from `nextcloud-php-fpm`.
+- `access-fix`: one-time chown on the shared volumes. FYI: `${ALLOW_USER}` is provided by `mwaeckerlin/allow-write-access` and resolves to the proper chown command for the runtime user.
+
+
+## Network Topology
+
+In the best setup, two completely separated distinct networks, encrypted and locked from outside access:
+
+- `php-network`: only [mwaeckerlin/nextcloud-nginx] ↔ [mwaeckerlin/nextcloud].
+- `db-network`: only [mwaeckerlin/nextcloud] ↔ `nextcloud-db`.
+- No direct DB access from NGINX nor from outside; no direct PHP access from outside.
+
+
+## Build and Development
+
+The images are available directly from Docker Hub, there is no need to build. But if you want to build them:
+
+1. Clone: `git clone <url> && cd nextcloud`
+2. Build the images: `docker compose build`
+3. Initialize a swarm if not already done: `docker swarm init`
+4. Create secrets: `printf "pass" | docker secret create nextcloud_db_password -` and `printf "pass" | docker secret create nextcloud_admin_password -`
+5. Deploy: `docker stack deploy -c docker-compose.yml nextcloud`
+6. Stop and tear down: `docker stack rm nextcloud`
+
+After deployment you may connect to Nextcloud at: http://localhost:8080
+
+For local development without Swarm, replace the `external: true` secrets with `file:` pointing to local plaintext files (keep those outside version control):
+
+```yaml
+secrets:
+  nextcloud_db_password:
+    file: ./dev-secrets/nextcloud_db_password
+  nextcloud_admin_password:
+    file: ./dev-secrets/nextcloud_admin_password
+```
+
+
+[mwaeckerlin/nextcloud-nginx]: https://github.com/mwaeckerlin/nextcloud-nginx "NGINX Service for Nextcloud"
+[mwaeckerlin/nextcloud]: https://github.com/mwaeckerlin/nextcloud "PHP-FPM Service for Nextcloud"
+[mwaeckerlin/nginx]: https://github.com/mwaeckerlin/nginx "NGINX Service Base Image"
+[mwaeckerlin/php-fpm]: https://github.com/mwaeckerlin/php-fpm "PHP-FPM Service Base Image"
+[nextcloud]: https://hub.docker.com/_/nextcloud "the official Nextcloud Docker image"

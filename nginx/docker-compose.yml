@@ -1,0 +1,6 @@
+services:
+  nextcloud-nginx:
+    build: .
+    image: mwaeckerlin/nextcloud-nginx
+    ports:
+      - "8080:8080"

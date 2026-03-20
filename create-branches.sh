@@ -3,15 +3,11 @@
 git checkout master
 git pull
 for i in {25..33}; do
-    export VERSION=latest
-    if [ $i -lt 31 ]; then
-        export VERSION=jammy
-    fi
     git checkout $i 2>/dev/null || git checkout -b $i
-    git fetch origin $i
+    git fetch origin $i 2>/dev/null || true
     git reset --hard origin/master
-    sed -i 's/ARG VERSION="latest"/ARG VERSION="'$VERSION'"/g' Dockerfile
-    sed -i 's/ENV SOURCE_FILE="latest.*"/ENV SOURCE_FILE="latest-'$i'.tar.bz2"/g' Dockerfile
+    sed -i 's/ARG SOURCE_FILE="latest\.tar\.bz2"/ARG SOURCE_FILE="latest-'$i'.tar.bz2"/g' \
+        php-fpm/Dockerfile
     date > rebuilt
     git add .
     git commit -m "Update to latest-$i"
