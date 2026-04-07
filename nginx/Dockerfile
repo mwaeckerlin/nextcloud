@@ -1,18 +1,12 @@
-FROM mwaeckerlin/very-base AS build
+FROM mwaeckerlin/build AS build
 ARG SOURCE_FILE="latest.tar.bz2"
-RUN ${PKG_INSTALL} gnupg wget
-RUN wget -qO /tmp/${SOURCE_FILE} \
-      https://download.nextcloud.com/server/releases/${SOURCE_FILE} \
-    && wget -qO /tmp/${SOURCE_FILE}.asc \
-      https://download.nextcloud.com/server/releases/${SOURCE_FILE}.asc \
-    && wget -qO /tmp/nextcloud.asc \
-      https://nextcloud.com/nextcloud.asc \
-    && gpg --import /tmp/nextcloud.asc \
-    && gpg --verify /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
-WORKDIR /app
+ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE} /tmp/${SOURCE_FILE}
+ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}.asc
+ADD --chmod=644 nextcloud.asc /tmp/nextcloud.asc
+RUN gpg --dearmor < /tmp/nextcloud.asc > /tmp/nextcloud.gpg
+RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN find . -name '*.php' -exec sh -c 'rm "{}" && touch "{}"' \;
-RUN ${ALLOW_USER} /app
 
 FROM mwaeckerlin/nginx
 ENV CONTAINERNAME "nextcloud-nginx"

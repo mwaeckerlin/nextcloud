@@ -3,8 +3,13 @@ services:
     extends:
       file: ./nginx/docker-compose.yml
       service: nextcloud-nginx
+    ports:
+      - "8824:8080"
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
+    depends_on:
+      nextcloud-php-fpm:
+        condition: service_started
     networks:
       - php-network
 
@@ -25,12 +30,10 @@ services:
       - nextcloud_db_password
       - nextcloud_admin_password
     volumes:
-      - nc-data:/app/data
-      - nc-config:/app/config
-      - nc-apps:/app/apps
+      - data:/app/data
+      - config:/app/config
+      - apps:/app/apps
     depends_on:
-      access-fix:
-        condition: service_completed_successfully
       nextcloud-db:
         condition: service_started
     networks:
@@ -47,28 +50,31 @@ services:
     secrets:
       - nextcloud_db_password
     volumes:
-      - nc-dbdata:/var/lib/mysql
+      - db:/var/lib/mysql
     networks:
       - db-network
 
   access-fix:
     image: mwaeckerlin/allow-write-access
     volumes:
-      - nc-data:/app/data
-      - nc-config:/app/config
-      - nc-apps:/app/apps
+      - data:/app/data
+      - config:/app/config
+      - apps:/app/apps
 
 secrets:
   nextcloud_db_password:
-    external: true
+    environment: NEXTCLOUD_DB_PASSWORD
+    #external: true
   nextcloud_admin_password:
-    external: true
+    environment: NEXTCLOUD_ADMIN_PASSWORD
+    #external: true
 
 volumes:
-  nc-data:
-  nc-config:
-  nc-apps:
-  nc-dbdata:
+  data:
+  config:
+  apps:
+  db:
+
 
 networks:
   php-network:

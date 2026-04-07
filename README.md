@@ -60,18 +60,44 @@ Two secrets are required:
 
 ### Creating secrets
 
+In production on a docker swarm, use secrets. For `docker compose`, passwords are passed via environment variables, which Docker Compose reads from a `.env` file. For testing copy the sample: `cp .env.sample .env`, for more security, generate strong random passwords once:
+
 ```sh
-printf "strong-db-password"    | docker secret create nextcloud_db_password -
-printf "strong-admin-password" | docker secret create nextcloud_admin_password -
+printf "NEXTCLOUD_DB_PASSWORD=%s\nNEXTCLOUD_ADMIN_PASSWORD=%s\n" \
+  "$(pwgen -sy 40 1)" "$(pwgen -sy 40 1)" > .env
 ```
 
-Use `printf` instead of `echo` to avoid a trailing newline in the secret value.
+Keep `.env` out of version control (added to `.gitignore`). Docker Compose picks it up automatically on `docker compose up`.
+
+Install `pwgen` if needed: `apt install pwgen` / `brew install pwgen`.
 
 If `nextcloud_admin_password` is absent or empty, a random password is generated and written to the container log:
 
 ```sh
-docker service logs nextcloud_nextcloud-php-fpm | grep 'generated admin password'
+docker compose logs nextcloud-php-fpm | grep 'generated admin password'
 ```
+
+#### Production: Docker Swarm secrets
+
+For multi-node or high-security deployments, use Docker Swarm secrets instead. Change the `secrets:` block in `docker-compose.yml` to:
+
+```yaml
+secrets:
+  nextcloud_db_password:
+    external: true
+  nextcloud_admin_password:
+    external: true
+```
+
+Then initialize Swarm and create the secrets (once per swarm):
+
+```sh
+docker swarm init
+docker secret create nextcloud_db_password    - <<<$(pwgen -sy 40 1)
+docker secret create nextcloud_admin_password - <<<$(pwgen -sy 40 1)
+```
+
+The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at rest and never exposed via `docker inspect`.
 
 
 ## Environment Variables
@@ -149,11 +175,12 @@ flowchart LR
     end
 ```
 
-Create secrets first (once per swarm):
+Generate passwords into `.env` (once) and start:
 
 ```sh
-printf "strong-db-password"    | docker secret create nextcloud_db_password -
-printf "strong-admin-password" | docker secret create nextcloud_admin_password -
+printf "NEXTCLOUD_DB_PASSWORD=%s\nNEXTCLOUD_ADMIN_PASSWORD=%s\n" \
+  "$(pwgen -sy 40 1)" "$(pwgen -sy 40 1)" > .env
+docker compose up
 ```
 
 Complete and secure `docker-compose.yml`:
@@ -214,9 +241,9 @@ services:
 
 secrets:
   nextcloud_db_password:
-    external: true
+    environment: NEXTCLOUD_DB_PASSWORD
   nextcloud_admin_password:
-    external: true
+    environment: NEXTCLOUD_ADMIN_PASSWORD
 
 volumes:
   nc-data:
@@ -255,8 +282,8 @@ The images are available directly from Docker Hub, there is no need to build. Bu
 
 1. Clone: `git clone <url> && cd nextcloud`
 2. Build the images: `docker compose build`
-3. Initialize a swarm if not already done: `docker swarm init`
-4. Create secrets: `printf "pass" | docker secret create nextcloud_db_password -` and `printf "pass" | docker secret create nextcloud_admin_password -`
+3. Initialize Swarm if not already done: `docker swarm init`
+4. Create secrets: `docker secret create nextcloud_db_password - <<<$(pwgen -sy 40 1)` and `docker secret create nextcloud_admin_password - <<<$(pwgen -sy 40 1)`
 5. Deploy: `docker stack deploy -c docker-compose.yml nextcloud`
 6. Stop and tear down: `docker stack rm nextcloud`
 
@@ -270,6 +297,24 @@ secrets:
     file: ./dev-secrets/nextcloud_db_password
   nextcloud_admin_password:
     file: ./dev-secrets/nextcloud_admin_password
+```
+
+Or (since Docker Compose 2.24) read directly from environment variables — no file, no Swarm needed:
+
+```yaml
+secrets:
+  nextcloud_db_password:
+    environment: NEXTCLOUD_DB_PASSWORD
+  nextcloud_admin_password:
+    environment: NEXTCLOUD_ADMIN_PASSWORD
+```
+
+Then start with:
+
+```sh
+NEXTCLOUD_DB_PASSWORD=$(pwgen -sy 40 1) \
+NEXTCLOUD_ADMIN_PASSWORD=$(pwgen -sy 40 1) \
+docker compose up
 ```
 
 
