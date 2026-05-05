@@ -38,7 +38,7 @@ All mutable Nextcloud data lives in three directories:
 |--------------------|---------------|----------------------------|
 | `/app/data`        | `nc-data`     | User files and uploads     |
 | `/app/config`      | `nc-config`   | `config.php` and fragments |
-| `/app/apps`        | `nc-apps`     | User-installed apps        |
+| `/app/custom_apps` | `nc-apps`     | User-installed apps        |
 
 **Permissions** on the volumes: the runtime user comes from the base images and is not root. The helper service `access-fix` (based on `mwaeckerlin/allow-write-access`) runs once at startup to set the correct ownership; after that the volumes keep their owner.
 
@@ -111,11 +111,19 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
   - `HOST`: public hostname (e.g. `cloud.example.com`); sets `overwritehost` and `trusted_domains`.
   - `PROTOCOL`: public protocol; default `https`.
+  - `SELF_CHECK_URL`: public base URL used for generated CLI/self-check URLs; for local Compose typically `http://localhost:8824`.
   - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot`.
   - `DEBUG`: set to `1` to enable Nextcloud debug mode; default `0`.
   - `MYSQL_HOST`: database hostname; default `mysql`, set to `nextcloud-db` in the compose setup.
   - `MYSQL_USER`: database user; default `nextcloud`.
   - `MYSQL_DATABASE`: database name; default `nextcloud`.
+  - `OFFICE_WOPI_URL`: internal Collabora endpoint; default `http://collabora:9980`.
+  - `OFFICE_PUBLIC_WOPI_URL`: internal Nextcloud URL used by Collabora to fetch WOPI settings/templates; default `http://nextcloud-nginx:8080`.
+  - `OFFICE_CALLBACK_URL`: internal callback URL used by Collabora; default `http://nextcloud-nginx:8080`.
+
+- **collabora**
+  - `COLLABORA_SERVER_NAME`: browser-visible host name for the office frontend; defaults to `HOST`.
+  - `aliasgroup1`: allowlist of accepted WOPI origins. In this setup it must include both the internal Nextcloud URL and, if needed, the browser-facing local URL.
 
 
 ## Docker Compose Setup
@@ -124,10 +132,12 @@ We will have the following network setup:
 
 ```mermaid
 flowchart LR
-    browser["Browser\nhttp://localhost:8080"]
+  browser["Browser\nhttp://localhost:8824"]
     nginx["nextcloud-nginx"]
     php["nextcloud-php-fpm"]
+  collabora["collabora"]
     db["nextcloud-db"]
+  smtp["smtp-relay"]
     data["nc-data"]
     config["nc-config"]
     apps["nc-apps"]
@@ -137,7 +147,11 @@ flowchart LR
 
     browser --> nginx
     nginx -->|FastCGI| php
+    browser -->|same-origin /browser /cool| nginx
+    nginx -->|reverse proxy| collabora
     php -->|SQL| db
+    php -->|SMTP| smtp
+    php -->|WOPI config/callback| collabora
 
     data --- php
     config --- php
@@ -162,6 +176,17 @@ flowchart LR
       db
     end
 
+    subgraph collab-net ["Encrypted Network\ncollabora-network"]
+      nginx
+      php
+      collabora
+    end
+
+    subgraph smtp-net ["Encrypted Network\nsmtp-network"]
+      php
+      smtp
+    end
+
     subgraph volumes ["Persistent Storage Volumes"]
       data
       config
@@ -183,6 +208,8 @@ printf "NEXTCLOUD_DB_PASSWORD=%s\nNEXTCLOUD_ADMIN_PASSWORD=%s\n" \
 docker compose up
 ```
 
+Then open Nextcloud at `http://localhost:8824`.
+
 Complete and secure `docker-compose.yml`:
 
 ```yaml
@@ -192,34 +219,57 @@ services:
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
     ports:
-      - "8080:8080"
+      - "8824:8080"
+    volumes:
+      - nc-apps:/app/custom_apps:ro
     networks:
       - php-network
+      - collabora-network
 
   nextcloud-php-fpm:
     image: mwaeckerlin/nextcloud:php-fpm
     environment:
-      HOST: cloud.example.com
-      PROTOCOL: https
+      HOST: localhost:8824
+      PROTOCOL: http
+      SELF_CHECK_URL: http://localhost:8824
       ADMIN_USER: admin
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
+      OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
     volumes:
       - nc-data:/app/data
       - nc-config:/app/config
-      - nc-apps:/app/apps
+      - nc-apps:/app/custom_apps
+      - ./php-fpm/custom.config.php:/app/config/custom.config.php:ro
     networks:
       - php-network
       - db-network
-    depends_on:
-      - access-fix
+      - smtp-network
+      - collabora-network
+
+  smtp-relay:
+    image: mwaeckerlin/smtp-relay
+    networks:
+      - smtp-network
+
+  collabora:
+    image: collabora/code
+    environment:
+      server_name: localhost:8824
+      domain: nextcloud-nginx|localhost
+      aliasgroup1: http://nextcloud-nginx:8080,http://localhost:8824
+      extra_params: --o:ssl.enable=false --o:ssl.termination=false
+    cap_add:
+      - MKNOD
+    networks:
+      - collabora-network
 
   nextcloud-db:
-    image: mariadb
+    image: mariadb:11.8
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
@@ -237,7 +287,7 @@ services:
     volumes:
       - nc-data:/app/data
       - nc-config:/app/config
-      - nc-apps:/app/apps
+      - nc-apps:/app/custom_apps
 
 secrets:
   nextcloud_db_password:
@@ -258,22 +308,35 @@ networks:
   db-network:
     driver_opts:
       encrypted: "1"
+  smtp-network:
+    driver_opts:
+      encrypted: "1"
+  collabora-network:
+    driver_opts:
+      encrypted: "1"
 ```
+
+Security note: the browser should normally reach Collabora only through `nextcloud-nginx` on the same origin. Publishing an extra host port for the `collabora` service is useful for debugging, but unnecessary for normal operation and should be avoided in hardened deployments.
 
 Service roles:
 - [mwaeckerlin/nextcloud:nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud:php-fpm] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.
-- [mwaeckerlin/nextcloud:php-fpm]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request.
+- [mwaeckerlin/nextcloud:php-fpm]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request; applies office defaults via `office-bootstrap.php`.
+- `collabora`: office backend reachable internally by NGINX and PHP-FPM; browser traffic should be proxied through NGINX.
 - `nextcloud-db`: MariaDB database; reachable only from `nextcloud-php-fpm`.
+- `smtp-relay`: mail relay reachable only from `nextcloud-php-fpm`.
 - `access-fix`: one-time chown on the shared volumes. FYI: `${ALLOW_USER}` is provided by `mwaeckerlin/allow-write-access` and resolves to the proper chown command for the runtime user.
 
 
 ## Network Topology
 
-In the best setup, two completely separated distinct networks, encrypted and locked from outside access:
+In the best setup, four distinct networks are used, each encrypted and locked down to the minimum required participants:
 
 - `php-network`: only [mwaeckerlin/nextcloud:nginx] ↔ [mwaeckerlin/nextcloud:php-fpm].
 - `db-network`: only [mwaeckerlin/nextcloud:php-fpm] ↔ `nextcloud-db`.
+- `smtp-network`: only [mwaeckerlin/nextcloud:php-fpm] ↔ `smtp-relay`.
+- `collabora-network`: [mwaeckerlin/nextcloud:nginx] ↔ [mwaeckerlin/nextcloud:php-fpm] ↔ `collabora`.
 - No direct DB access from NGINX nor from outside; no direct PHP access from outside.
+- For hardened deployments, no direct browser-facing port is needed on `collabora`; only NGINX should be published.
 
 
 ## Build and Development
@@ -287,7 +350,7 @@ The images are available directly from Docker Hub, there is no need to build. Bu
 5. Deploy: `docker stack deploy -c docker-compose.yml nextcloud`
 6. Stop and tear down: `docker stack rm nextcloud`
 
-After deployment you may connect to Nextcloud at: http://localhost:8080
+After deployment you may connect to Nextcloud at: http://localhost:8824
 
 For local development without Swarm, replace the `external: true` secrets with `file:` pointing to local plaintext files (keep those outside version control):
 
