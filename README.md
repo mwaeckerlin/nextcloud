@@ -317,6 +317,76 @@ NEXTCLOUD_ADMIN_PASSWORD=$(pwgen -sy 40 1) \
 docker compose up
 ```
 
+## Issues with Collabora Office Integration
+
+### Target state
+
+A stable Nextcloud + Collabora integration requires two clearly separated URL perspectives:
+
+- Browser perspective: users access Nextcloud through the public host (for example `localhost:8824`).
+- Service perspective: containers talk to each other via Docker DNS (for example `nextcloud-nginx:8080`).
+
+If these two perspectives are mixed, typical symptoms are endless editor reloads, repeated WebSocket reconnects, or seemingly "green" 200/101 responses without a usable editor.
+
+### Proven configuration
+
+For this Compose topology, the following mapping has proven reliable:
+
+- `richdocuments.wopi_url`: `http://collabora:9980`
+- `richdocuments.public_wopi_url`: `http://nextcloud-nginx:8080`
+- `richdocuments.wopi_callback_url`: `http://nextcloud-nginx:8080`
+- Collabora `aliasgroup1`: includes internal `http://nextcloud-nginx:8080` and optionally the local browser host.
+
+Important: from inside the Collabora container, `localhost` means the container itself, not the Docker host and not the Nextcloud NGINX service.
+
+### Why loops can still happen
+
+Even with correct WOPI URLs, some absolute links in Richdocuments (for example preset/template settings) can still depend on the incoming request host.
+If `localhost:8824` appears in server-side responses, Collabora will try to fetch those URLs internally and produce errors such as:
+
+- `Failed to fetch preset uri[http://localhost:8824/... ]`
+- `ECONNREFUSED`
+- `Failed to load all settings ...`
+
+Result: kit processes are discarded and the editor stays in a Ready/Init cycle.
+
+### Host resolution fix
+
+A request-specific switch in `custom.config.php` is effective:
+
+- for normal browser requests, keep normal public-host behavior,
+- for `COOLWSD HTTP Agent` requests, switch internally to `nextcloud-nginx:8080` (http).
+
+This keeps browser links correct while letting Collabora reliably reach internal settings/template URLs.
+
+### Persistence and re-initialization (new volumes)
+
+The integration remains reproducible with fresh volumes if the following points are in place:
+
+1. The Dockerfile includes office defaults (`OFFICE_WOPI_URL`, `OFFICE_PUBLIC_WOPI_URL`, `OFFICE_CALLBACK_URL`) and the bootstrap entrypoint.
+2. `office-bootstrap.php` installs/enables `richdocuments` and sets required app values via `occ`.
+3. `custom.config.php` is always loaded (either from the image or as a bind mount, as in this Compose file).
+4. With an empty `config` volume, `autoconfig.php` is provided automatically and first-time setup runs headless.
+
+This ensures behavior is not dependent on old volume state.
+
+### Common pitfalls
+
+- Using `localhost` as internal callback/settings base.
+- Setting only `wopi_url` without keeping `public_wopi_url` and `wopi_callback_url` consistent.
+- Treating 502 errors during container restarts as permanent issues (short upstream outages are normal during restart).
+- Looking only at browser console output; decisive evidence comes from time-correlated logs in NGINX, Collabora, and PHP-FPM.
+
+### Minimal verification test
+
+After start or recreate:
+
+1. Open a document in the editor.
+2. Check Collabora logs for absence of `localhost:...` preset-fetch failures and `ECONNREFUSED`.
+3. Check NGINX logs to confirm `/cool/.../ws` upgrades run without repeated errors.
+
+If these three points are stable, the integration is usually correct.
+
 
 [mwaeckerlin/nextcloud-nginx]: https://github.com/mwaeckerlin/nextcloud-nginx "NGINX Service for Nextcloud"
 [mwaeckerlin/nextcloud]: https://github.com/mwaeckerlin/nextcloud "PHP-FPM Service for Nextcloud"
