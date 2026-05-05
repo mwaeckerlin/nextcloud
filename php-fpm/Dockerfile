@@ -22,11 +22,12 @@ ENV MYSQL_HOST "mysql"
 ENV MYSQL_USER "nextcloud"
 ENV MYSQL_DATABASE "nextcloud"
 ENV MYSQL_PASSWORD ""
-ENV OFFICE_WOPI_URL ""
-ENV OFFICE_PUBLIC_WOPI_URL ""
-ENV OFFICE_CALLBACK_URL ""
+ENV OFFICE_WOPI_URL "http://collabora:9980"
+ENV OFFICE_PUBLIC_WOPI_URL "http://nextcloud-nginx:8080"
+ENV OFFICE_CALLBACK_URL "http://nextcloud-nginx:8080"
+ENV OFFICE_WOPI_ALLOWLIST ""
 COPY --from=build /app /app
-COPY --from=build /bin/php /bin/php
+COPY --from=build /usr/bin/php /usr/bin/php
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php

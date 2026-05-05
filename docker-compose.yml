@@ -14,13 +14,17 @@ services:
         condition: service_started
     networks:
       - php-network
+      - collabora-network
 
   nextcloud-php-fpm:
     extends:
       file: ./php-fpm/docker-compose.yml
       service: nextcloud-php-fpm
     environment:
+      HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
+      SELF_CHECK_URL: ${SELF_CHECK_URL:-http://localhost:8824}
+      OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -46,7 +50,9 @@ services:
   collabora:
     image: collabora/code
     environment:
-      aliasgroup1: http://nextcloud-nginx:8080
+      server_name: ${COLLABORA_SERVER_NAME:-${HOST:-localhost:8824}}
+      domain: nextcloud-nginx|localhost
+      aliasgroup1: http://nextcloud-nginx:8080,http://localhost:8824
       extra_params: --o:ssl.enable=false --o:ssl.termination=false
     cap_add:
       - MKNOD

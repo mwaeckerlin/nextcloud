@@ -2,6 +2,8 @@
 // Runtime configuration fragment: always loaded by Nextcloud alongside config.php.
 // Values are read from environment variables at request time (clear_env = no in fpm).
 
+$forceOverwriteHost = getenv('FORCE_OVERWRITEHOST') === '1';
+
 $CONFIG = [
     'log_type' => 'errorlog',
     'loglevel' => (int) (getenv('LOGLEVEL') !== false ? getenv('LOGLEVEL') : 2),
@@ -41,7 +43,6 @@ if (function_exists('apcu_enabled') && apcu_enabled()) {
 $hostNoPort = null;
 if ($host = getenv('HOST')) {
     $hostNoPort = preg_replace('/:\\d+$/', '', $host);
-    $CONFIG['overwritehost'] = $host;
     $CONFIG['trusted_domains'] = array_values(array_unique([
         $host,
         $hostNoPort,
@@ -49,7 +50,10 @@ if ($host = getenv('HOST')) {
         'nextcloud-nginx',
         'nextcloud-nextcloud-nginx-1',
     ]));
-    $CONFIG['overwrite.cli.url'] = getenv('SELF_CHECK_URL') ?: ((getenv('PROTOCOL') ?: 'https') . '://' . $host);
+    if ($forceOverwriteHost) {
+        $CONFIG['overwritehost'] = $host;
+        $CONFIG['overwrite.cli.url'] = getenv('SELF_CHECK_URL') ?: ((getenv('PROTOCOL') ?: 'https') . '://' . $host);
+    }
 }
 
 if ($selfCheckUrl = getenv('SELF_CHECK_URL')) {
@@ -70,4 +74,13 @@ $CONFIG['mail_domain'] = getenv('MAIL_DOMAIN') ?: ($hostNoPort ?: 'localhost');
 
 if ($webroot = getenv('WEBROOT')) {
     $CONFIG['overwritewebroot'] = $webroot;
+}
+
+// Collabora fetches richdocuments settings/assets server-to-server.
+// When users access Nextcloud via localhost, absolute URLs in this response
+// would otherwise point to localhost (inside collabora container) and fail.
+$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+if (strpos($userAgent, 'COOLWSD HTTP Agent') !== false) {
+    $CONFIG['overwritehost'] = 'nextcloud-nginx:8080';
+    $CONFIG['overwriteprotocol'] = 'http';
 }

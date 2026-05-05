@@ -1,11 +1,13 @@
 <?php
 declare(strict_types=1);
 
-function logMessage(string $message): void {
+function logMessage(string $message): void
+{
     fwrite(STDERR, "nextcloud-office-bootstrap: {$message}\n");
 }
 
-function getSecretOrEnv(string $envName, string $secretFile): string {
+function getSecretOrEnv(string $envName, string $secretFile): string
+{
     $value = getenv($envName);
     if (is_string($value) && $value !== '') {
         return $value;
@@ -21,7 +23,8 @@ function getSecretOrEnv(string $envName, string $secretFile): string {
     return '';
 }
 
-function runOcc(array $args): array {
+function runOcc(array $args): array
+{
     $cmd = array_merge(['php', '/app/occ'], $args);
     $descriptorSpec = [
         0 => ['pipe', 'r'],
@@ -43,12 +46,14 @@ function runOcc(array $args): array {
     return [$code, (string) $stdout, (string) $stderr];
 }
 
-function isInstalled(): bool {
-    [, $stdout, ] = runOcc(['status', '--no-ansi']);
+function isInstalled(): bool
+{
+    [, $stdout,] = runOcc(['status', '--no-ansi']);
     return strpos($stdout, 'installed: true') !== false;
 }
 
-function ensureAutoconfig(): void {
+function ensureAutoconfig(): void
+{
     if (is_file('/app/config/config.php') || is_file('/app/config/autoconfig.php')) {
         return;
     }
@@ -59,7 +64,8 @@ function ensureAutoconfig(): void {
     }
 }
 
-function installNextcloudIfNeeded(): void {
+function installNextcloudIfNeeded(): void
+{
     if (isInstalled()) {
         return;
     }
@@ -109,7 +115,8 @@ function installNextcloudIfNeeded(): void {
     logMessage('Installation did not complete within retry window');
 }
 
-function applyOfficeConfig(): void {
+function applyOfficeConfig(): void
+{
     $wopiUrl = getenv('OFFICE_WOPI_URL') ?: '';
     if ($wopiUrl === '') {
         logMessage('OFFICE_WOPI_URL is empty, skipping Office configuration');
@@ -123,25 +130,42 @@ function applyOfficeConfig(): void {
 
     logMessage('Applying Office configuration from environment');
 
-    runOcc(['app:install', 'richdocuments', '--no-ansi']);
-    runOcc(['app:enable', 'richdocuments', '--no-ansi']);
+    [$code] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
+    logMessage("app:install returned {$code}");
+
+    [$code] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
+    logMessage("app:enable returned {$code}");
 
     $callbackUrl = getenv('OFFICE_CALLBACK_URL') ?: '';
     if ($callbackUrl !== '') {
-        runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--callback-url=' . $callbackUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--callback-url=' . $callbackUrl, '--no-ansi']);
+        logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     } else {
-        runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--no-ansi']);
+        logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
-    runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiUrl, '--no-ansi']);
+    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    logMessage("wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     if ($callbackUrl !== '') {
-        runOcc(['config:app:set', 'richdocuments', 'wopi_callback_url', '--value=' . $callbackUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_callback_url', '--value=' . $callbackUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+        logMessage("wopi_callback_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
     $publicWopiUrl = getenv('OFFICE_PUBLIC_WOPI_URL') ?: '';
     if ($publicWopiUrl !== '') {
-        runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+        logMessage("public_wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
+    }
+
+    $wopiAllowlist = getenv('OFFICE_WOPI_ALLOWLIST') ?: '';
+    if ($wopiAllowlist !== '') {
+        [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_allowlist', '--value=' . $wopiAllowlist, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+        logMessage("wopi_allowlist set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
+    } else {
+        [$code, , $stderr] = runOcc(['config:app:delete', 'richdocuments', 'wopi_allowlist', '--error-if-not-exists', '--no-ansi']);
+        logMessage("wopi_allowlist delete returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
     logMessage('Office configuration applied');
