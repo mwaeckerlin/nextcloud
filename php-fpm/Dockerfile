@@ -9,8 +9,9 @@ RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN mkdir -p data
 USER root
 RUN ${ALLOW_USER} data
+RUN ${PKG_INSTALL} php
 
-FROM mwaeckerlin/php-fpm
+FROM mwaeckerlin/php-fpm AS production
 ENV ADMIN_USER "admin"
 ENV ADMIN_PWD ""
 ENV HOST ""
@@ -21,6 +22,15 @@ ENV MYSQL_HOST "mysql"
 ENV MYSQL_USER "nextcloud"
 ENV MYSQL_DATABASE "nextcloud"
 ENV MYSQL_PASSWORD ""
+ENV OFFICE_WOPI_URL ""
+ENV OFFICE_PUBLIC_WOPI_URL ""
+ENV OFFICE_CALLBACK_URL ""
 COPY --from=build /app /app
+COPY --from=build /bin/php /bin/php
 COPY autoconfig.php /app/config/autoconfig.php
+COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php
+COPY --chmod=755 office-bootstrap.php /usr/local/bin/office-bootstrap.php
+ENTRYPOINT ["/usr/bin/php", "/usr/local/bin/office-bootstrap.php"]
+
+FROM production

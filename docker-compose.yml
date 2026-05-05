@@ -5,6 +5,8 @@ services:
       service: nextcloud-nginx
     ports:
       - "8824:8080"
+    volumes:
+      - apps:/app/custom_apps:ro
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
     depends_on:
@@ -18,30 +20,43 @@ services:
       file: ./php-fpm/docker-compose.yml
       service: nextcloud-php-fpm
     environment:
-      HOST: ""
-      PROTOCOL: https
-      ADMIN_USER: admin
-      WEBROOT: ""
-      DEBUG: "0"
-      MYSQL_HOST: nextcloud-db
-      MYSQL_USER: nextcloud
-      MYSQL_DATABASE: nextcloud
+      PROTOCOL: ${PROTOCOL:-http}
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
     volumes:
       - data:/app/data
       - config:/app/config
-      - apps:/app/apps
+      - apps:/app/custom_apps
+      - ./php-fpm/custom.config.php:/app/config/custom.config.php:ro
     depends_on:
       nextcloud-db:
         condition: service_started
     networks:
       - php-network
       - db-network
+      - smtp-network
+      - collabora-network
+
+  smtp-relay:
+    image: mwaeckerlin/smtp-relay
+    networks:
+      - smtp-network
+
+  collabora:
+    image: collabora/code
+    environment:
+      aliasgroup1: http://nextcloud-nginx:8080
+      extra_params: --o:ssl.enable=false --o:ssl.termination=false
+    cap_add:
+      - MKNOD
+    ports:
+      - "9983:9980"
+    networks:
+      - collabora-network
 
   nextcloud-db:
-    image: mariadb
+    image: mariadb:11.8
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
@@ -59,7 +74,7 @@ services:
     volumes:
       - data:/app/data
       - config:/app/config
-      - apps:/app/apps
+      - apps:/app/custom_apps
 
 secrets:
   nextcloud_db_password:
@@ -81,5 +96,11 @@ networks:
     driver_opts:
       encrypted: 1
   db-network:
+    driver_opts:
+      encrypted: 1
+  smtp-network:
+    driver_opts:
+      encrypted: 1
+  collabora-network:
     driver_opts:
       encrypted: 1
