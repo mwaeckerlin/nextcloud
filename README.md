@@ -2,8 +2,8 @@
 
 Lean, hardened Nextcloud stack with two images:
 
-- [mwaeckerlin/nextcloud-nginx]: NGINX Nextcloud frontend in only ??MB
-- [mwaeckerlin/nextcloud]: PHP‑FPM Nextcloud backend in only ??MB
+- [mwaeckerlin/nextcloud:nginx]: NGINX Nextcloud frontend in only 608MB
+- [mwaeckerlin/nextcloud:php-fpm]: PHP‑FPM Nextcloud backend in only 868MB
 
 This splitting is in accordance to Docker philosophy of having only one server process per image and to NGINX which splits PHP processing into a separate service. It therefore also follows strong microservice architecture.
 
@@ -16,13 +16,13 @@ Both together are the most lean and secure images for Nextcloud:
  - all PHP files are empty stubs in the NGINX frontend
  - passwords never in environment variables, delivered as Docker secrets
 
-??MB is mostly the size of the Nextcloud distribution itself, stored in both images.
+Most of the combined 1476MB footprint is the Nextcloud distribution itself, stored in both images.
 
 Compared to the official [nextcloud] image, this package has:
  - Less attack surface.
  - Better encapsulation.
  - Running as non-privileged user.
- - Much smaller: ~??MB (nginx) + ~??MB (php-fpm) vs. ~??MB for the official fpm-based image.
+ - Much smaller: ~608MB (nginx) + ~868MB (php-fpm) vs. ~1.43GB for the official `nextcloud:latest` image.
  - Clear segmentation: only NGINX can reach PHP, only PHP can reach the DB; networks are isolated and marked `encrypted` (e.g. when run in Docker Swarm).
  - Headless: no shell, no package manager at runtime.
  - Configurable via environment (NGINX through envwrap templates, Nextcloud via `custom.config.php` reading `getenv()`).
@@ -188,7 +188,7 @@ Complete and secure `docker-compose.yml`:
 ```yaml
 services:
   nextcloud-nginx:
-    image: mwaeckerlin/nextcloud-nginx
+    image: mwaeckerlin/nextcloud:nginx
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
     ports:
@@ -197,7 +197,7 @@ services:
       - php-network
 
   nextcloud-php-fpm:
-    image: mwaeckerlin/nextcloud
+    image: mwaeckerlin/nextcloud:php-fpm
     environment:
       HOST: cloud.example.com
       PROTOCOL: https
@@ -261,8 +261,8 @@ networks:
 ```
 
 Service roles:
-- [mwaeckerlin/nextcloud-nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.
-- [mwaeckerlin/nextcloud]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request.
+- [mwaeckerlin/nextcloud:nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud:php-fpm] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.
+- [mwaeckerlin/nextcloud:php-fpm]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request.
 - `nextcloud-db`: MariaDB database; reachable only from `nextcloud-php-fpm`.
 - `access-fix`: one-time chown on the shared volumes. FYI: `${ALLOW_USER}` is provided by `mwaeckerlin/allow-write-access` and resolves to the proper chown command for the runtime user.
 
@@ -271,8 +271,8 @@ Service roles:
 
 In the best setup, two completely separated distinct networks, encrypted and locked from outside access:
 
-- `php-network`: only [mwaeckerlin/nextcloud-nginx] ↔ [mwaeckerlin/nextcloud].
-- `db-network`: only [mwaeckerlin/nextcloud] ↔ `nextcloud-db`.
+- `php-network`: only [mwaeckerlin/nextcloud:nginx] ↔ [mwaeckerlin/nextcloud:php-fpm].
+- `db-network`: only [mwaeckerlin/nextcloud:php-fpm] ↔ `nextcloud-db`.
 - No direct DB access from NGINX nor from outside; no direct PHP access from outside.
 
 
@@ -388,8 +388,8 @@ After start or recreate:
 If these three points are stable, the integration is usually correct.
 
 
-[mwaeckerlin/nextcloud-nginx]: https://github.com/mwaeckerlin/nextcloud-nginx "NGINX Service for Nextcloud"
-[mwaeckerlin/nextcloud]: https://github.com/mwaeckerlin/nextcloud "PHP-FPM Service for Nextcloud"
+[mwaeckerlin/nextcloud:nginx]: https://github.com/mwaeckerlin/nextcloud-nginx "NGINX Service for Nextcloud"
+[mwaeckerlin/nextcloud:php-fpm]: https://github.com/mwaeckerlin/nextcloud "PHP-FPM Service for Nextcloud"
 [mwaeckerlin/nginx]: https://github.com/mwaeckerlin/nginx "NGINX Service Base Image"
 [mwaeckerlin/php-fpm]: https://github.com/mwaeckerlin/php-fpm "PHP-FPM Service Base Image"
 [nextcloud]: https://hub.docker.com/_/nextcloud "the official Nextcloud Docker image"

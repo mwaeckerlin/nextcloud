@@ -1,5 +1,5 @@
 services:
   nextcloud-php-fpm:
     build: .
-    image: mwaeckerlin/nextcloud
+    image: mwaeckerlin/nextcloud:php-fpm
 
