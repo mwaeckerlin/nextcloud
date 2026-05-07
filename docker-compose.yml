@@ -26,7 +26,8 @@ services:
       PROTOCOL: ${PROTOCOL:-http}
       WEBROOT:
       SELF_CHECK_URL: ${SELF_CHECK_URL:-http://localhost:8824}
-      OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
+      OFFICE_PUBLIC_WOPI_URL: ${SELF_CHECK_URL:-http://localhost:8824}
+      OFFICE_CALLBACK_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password

@@ -32,6 +32,7 @@ COPY --from=build /usr/bin/php /usr/bin/php
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php
+COPY custom.config.php /usr/local/share/nextcloud/custom.config.php
 COPY --chmod=755 office-bootstrap.php /usr/local/bin/office-bootstrap.php
 ENTRYPOINT ["/usr/bin/php", "/usr/local/bin/office-bootstrap.php"]
 

@@ -109,12 +109,3 @@ $CONFIG['mail_domain'] = getenv('MAIL_DOMAIN') ?: ($hostNoPort ?: 'localhost');
 if ($webroot !== '') {
     $CONFIG['overwritewebroot'] = $webroot;
 }
-
-// Collabora fetches richdocuments settings/assets server-to-server.
-// When users access Nextcloud via localhost, absolute URLs in this response
-// would otherwise point to localhost (inside collabora container) and fail.
-$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-if (strpos($userAgent, 'COOLWSD HTTP Agent') !== false) {
-    $CONFIG['overwritehost'] = 'nextcloud-nginx:8080';
-    $CONFIG['overwriteprotocol'] = 'http';
-}

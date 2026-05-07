@@ -54,7 +54,7 @@ services:
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
-      OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
+      OFFICE_PUBLIC_WOPI_URL: https://${DOMAIN}
       OFFICE_CALLBACK_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password

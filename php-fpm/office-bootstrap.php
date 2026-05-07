@@ -64,6 +64,34 @@ function ensureAutoconfig(): void
     }
 }
 
+function ensureRuntimeConfig(): void
+{
+    $source = '/usr/local/share/nextcloud/custom.config.php';
+    $target = '/app/config/custom.config.php';
+
+    if (!is_file($source)) {
+        return;
+    }
+
+    if (!is_dir('/app/config')) {
+        mkdir('/app/config', 0770, true);
+    }
+
+    $sourceHash = @hash_file('sha256', $source);
+    $targetHash = is_file($target) ? @hash_file('sha256', $target) : false;
+
+    if ($sourceHash !== false && $sourceHash === $targetHash) {
+        return;
+    }
+
+    if (!copy($source, $target)) {
+        logMessage('Failed to sync custom.config.php into mounted config volume');
+        return;
+    }
+
+    logMessage(is_string($targetHash) ? 'Updated custom.config.php in mounted config volume' : 'Installed custom.config.php into mounted config volume');
+}
+
 function listVisibleEntries(string $path): array
 {
     $entries = @scandir($path);
@@ -251,6 +279,7 @@ function applyOfficeConfig(): void
 
 ensureAutoconfig();
 seedCustomAppsIfEmpty();
+ensureRuntimeConfig();
 installNextcloudIfNeeded();
 applyOfficeConfig();
 
