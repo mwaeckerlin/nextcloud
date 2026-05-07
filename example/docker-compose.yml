@@ -50,6 +50,7 @@ services:
     environment:
       HOST: ${DOMAIN}
       PROTOCOL: https
+      FORCE_OVERWRITEHOST: "1"
       WEBROOT:
       SELF_CHECK_URL: https://${DOMAIN}
       MYSQL_HOST: nextcloud-db
@@ -57,7 +58,7 @@ services:
       MYSQL_DATABASE: nextcloud
       OFFICE_WOPI_URL: http://collabora:9980
       OFFICE_PUBLIC_WOPI_URL: https://${DOMAIN}
-      OFFICE_CALLBACK_URL: http://nextcloud-nginx:8080
+      OFFICE_CALLBACK_URL: https://${DOMAIN}
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -85,7 +86,7 @@ services:
       server_name: ${DOMAIN}
       domain: nextcloud-nginx|${DOMAIN}|www.${DOMAIN}
       aliasgroup1: http://nextcloud-nginx:8080,https://${DOMAIN},https://www.${DOMAIN}
-      extra_params: --o:ssl.enable=false --o:ssl.termination=false
+      extra_params: --o:ssl.enable=false --o:ssl.termination=true
     cap_add:
       - MKNOD
     networks:
