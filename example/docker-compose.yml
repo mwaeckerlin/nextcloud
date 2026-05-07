@@ -89,8 +89,10 @@ services:
     cap_add:
       - MKNOD
     networks:
-      - collabora-network
-      - ingress
+      collabora-network:
+        aliases:
+          - ${DOMAIN}
+      ingress:
 
   nextcloud-db:
     image: mariadb

@@ -219,13 +219,55 @@ function appendWebroot(string $url, string $webroot): string
     return rtrim($url, '/') . $webroot;
 }
 
+function hasValidWopiDiscovery(string $wopiUrl): bool
+{
+    $discoveryUrl = rtrim($wopiUrl, '/') . '/hosting/discovery';
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 5,
+            'ignore_errors' => true,
+        ],
+    ]);
+
+    $xml = @file_get_contents($discoveryUrl, false, $context);
+    if (!is_string($xml)) {
+        return false;
+    }
+
+    $xml = trim($xml);
+    if ($xml === '') {
+        return false;
+    }
+
+    return strpos($xml, '<wopi-discovery') !== false;
+}
+
+function resolveWopiUrl(string $configuredWopiUrl): string
+{
+    if (hasValidWopiDiscovery($configuredWopiUrl)) {
+        return $configuredWopiUrl;
+    }
+
+    $fallback = 'http://collabora:9980';
+    if ($configuredWopiUrl !== $fallback && hasValidWopiDiscovery($fallback)) {
+        logMessage("Configured OFFICE_WOPI_URL '{$configuredWopiUrl}' has no valid discovery XML, falling back to '{$fallback}'");
+        return $fallback;
+    }
+
+    logMessage("Configured OFFICE_WOPI_URL '{$configuredWopiUrl}' has no valid discovery XML and fallback is unavailable");
+    return $configuredWopiUrl;
+}
+
 function applyOfficeConfig(): void
 {
-    $wopiUrl = getenv('OFFICE_WOPI_URL') ?: '';
-    if ($wopiUrl === '') {
+    $configuredWopiUrl = getenv('OFFICE_WOPI_URL') ?: '';
+    if ($configuredWopiUrl === '') {
         logMessage('OFFICE_WOPI_URL is empty, skipping Office configuration');
         return;
     }
+
+    $wopiUrl = resolveWopiUrl($configuredWopiUrl);
 
     if (!isInstalled()) {
         logMessage('Nextcloud still not installed, skipping Office configuration');
