@@ -1,16 +1,39 @@
 #!/bin/bash
+set -euo pipefail
 
-git checkout master
-git pull
-for i in {25..33}; do
-    git checkout $i 2>/dev/null || git checkout -b $i
-    git fetch origin $i 2>/dev/null || true
-    git reset --hard origin/master
-    sed -i 's/ARG SOURCE_FILE="latest\.tar\.bz2"/ARG SOURCE_FILE="latest-'$i'.tar.bz2"/g' \
-        php-fpm/Dockerfile
+BASE_BRANCH="${BASE_BRANCH:-new}"
+START_VERSION="${START_VERSION:-30"
+END_VERSION="${END_VERSION:-33}"
+
+if [[ "$#" -gt 0 ]]; then
+    VERSIONS=("$@")
+else
+    VERSIONS=()
+    for ((v=START_VERSION; v<=END_VERSION; v++)); do
+        VERSIONS+=("$v")
+    done
+fi
+
+git fetch origin
+git checkout "$BASE_BRANCH"
+git pull --ff-only origin "$BASE_BRANCH"
+
+for version in "${VERSIONS[@]}"; do
+    branch="new-$version"
+    source_file="latest-${version}.tar.bz2"
+
+    git checkout -B "$branch" "origin/$BASE_BRANCH"
+
+    sed -Ei "s|^ARG SOURCE_FILE=.*$|ARG SOURCE_FILE=\"${source_file}\"|" php-fpm/Dockerfile
+    sed -Ei "s|^ARG SOURCE_FILE=.*$|ARG SOURCE_FILE=\"${source_file}\"|" nginx/Dockerfile
+
     date > rebuilt
-    git add .
-    git commit -m "Update to latest-$i"
-    git push -f origin $i
+
+    git add php-fpm/Dockerfile nginx/Dockerfile rebuilt
+    if ! git diff --cached --quiet; then
+        git commit -m "Build Nextcloud ${version} images"
+    fi
+    git push -f origin "$branch"
 done
-git checkout master
+
+git checkout "$BASE_BRANCH"

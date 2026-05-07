@@ -7,6 +7,8 @@ ADD --chmod=644 nextcloud.asc /tmp/nextcloud.asc
 RUN gpg --dearmor < /tmp/nextcloud.asc > /tmp/nextcloud.gpg
 RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
+RUN mkdir -p /seed/custom_apps
+RUN if [ -d custom_apps ]; then cp -a custom_apps/. /seed/custom_apps/; fi
 RUN mkdir -p data
 USER root
 RUN ${ALLOW_USER} data
@@ -29,6 +31,7 @@ ENV OFFICE_CALLBACK_URL "http://nextcloud-nginx:8080"
 ENV OFFICE_WOPI_ALLOWLIST ""
 COPY --from=build /app /app
 COPY --from=build /usr/bin/php /usr/bin/php
+COPY --from=build /seed/custom_apps /usr/local/share/nextcloud/seed/custom_apps
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php

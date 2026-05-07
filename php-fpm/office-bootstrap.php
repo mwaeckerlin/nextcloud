@@ -64,6 +64,68 @@ function ensureAutoconfig(): void
     }
 }
 
+function listVisibleEntries(string $path): array
+{
+    $entries = @scandir($path);
+    if ($entries === false) {
+        return [];
+    }
+
+    return array_values(array_filter(
+        $entries,
+        static fn(string $entry): bool => $entry !== '.' && $entry !== '..'
+    ));
+}
+
+function copyTree(string $source, string $target): void
+{
+    if (is_file($source)) {
+        $parent = dirname($target);
+        if (!is_dir($parent)) {
+            mkdir($parent, 0775, true);
+        }
+        copy($source, $target);
+        return;
+    }
+
+    if (!is_dir($target)) {
+        mkdir($target, 0775, true);
+    }
+
+    foreach (listVisibleEntries($source) as $entry) {
+        copyTree($source . '/' . $entry, $target . '/' . $entry);
+    }
+}
+
+function seedCustomAppsIfEmpty(): void
+{
+    $seedDir = '/usr/local/share/nextcloud/seed/custom_apps';
+    $targetDir = '/app/custom_apps';
+
+    if (!is_dir($seedDir)) {
+        return;
+    }
+
+    $seedEntries = listVisibleEntries($seedDir);
+    if ($seedEntries === []) {
+        return;
+    }
+
+    if (!is_dir($targetDir)) {
+        mkdir($targetDir, 0775, true);
+    }
+
+    if (listVisibleEntries($targetDir) !== []) {
+        return;
+    }
+
+    foreach ($seedEntries as $entry) {
+        copyTree($seedDir . '/' . $entry, $targetDir . '/' . $entry);
+    }
+
+    logMessage('Seeded custom_apps into mounted apps volume (first run)');
+}
+
 function installNextcloudIfNeeded(): void
 {
     if (isInstalled()) {
@@ -188,6 +250,7 @@ function applyOfficeConfig(): void
 }
 
 ensureAutoconfig();
+seedCustomAppsIfEmpty();
 installNextcloudIfNeeded();
 applyOfficeConfig();
 
