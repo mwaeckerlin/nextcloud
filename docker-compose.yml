@@ -34,7 +34,6 @@ services:
       - data:/app/data
       - config:/app/config
       - apps:/app/custom_apps
-      - ./php-fpm/custom.config.php:/app/config/custom.config.php:ro
     depends_on:
       nextcloud-db:
         condition: service_started

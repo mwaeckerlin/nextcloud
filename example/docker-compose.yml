@@ -26,9 +26,7 @@ services:
     restart: unless-stopped
 
   nextcloud-nginx:
-    extends:
-      file: ../nginx/docker-compose.yml
-      service: nextcloud-nginx
+    image: mwaeckerlin/nextcloud:nginx
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
       WEBROOT:
@@ -66,9 +64,7 @@ services:
       - traefik.http.services.nextcloud.loadbalancer.server.port=8080
 
   nextcloud-php-fpm:
-    extends:
-      file: ../php-fpm/docker-compose.yml
-      service: nextcloud-php-fpm
+    image: mwaeckerlin/nextcloud:php-fpm
     environment:
       HOST: ${DOMAIN}
       PROTOCOL: https
@@ -83,7 +79,6 @@ services:
       - data:/app/data
       - config:/app/config
       - apps:/app/custom_apps
-      - ../php-fpm/custom.config.php:/app/config/custom.config.php:ro
     depends_on:
       nextcloud-db:
         condition: service_started
