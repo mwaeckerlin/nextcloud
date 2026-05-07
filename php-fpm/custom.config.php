@@ -4,6 +4,37 @@
 
 $forceOverwriteHost = getenv('FORCE_OVERWRITEHOST') === '1';
 
+function addWebrootToUrl(string $url, string $webroot): string
+{
+    if ($webroot === '') {
+        return $url;
+    }
+
+    $parts = parse_url($url);
+    if ($parts === false) {
+        return $url;
+    }
+
+    $path = $parts['path'] ?? '';
+    if ($path !== '' && $path !== '/') {
+        return $url;
+    }
+
+    $scheme = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
+    $user = $parts['user'] ?? '';
+    $pass = $parts['pass'] ?? '';
+    $auth = $user === '' ? '' : $user . ($pass === '' ? '' : ':' . $pass) . '@';
+    $host = $parts['host'] ?? '';
+    $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+    $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+    $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+    return $scheme . $auth . $host . $port . $webroot . $query . $fragment;
+}
+
+$webroot = getenv('WEBROOT');
+$webroot = is_string($webroot) && trim($webroot, '/') !== '' ? '/' . trim($webroot, '/') : '';
+
 $CONFIG = [
     'log_type' => 'errorlog',
     'loglevel' => (int) (getenv('LOGLEVEL') !== false ? getenv('LOGLEVEL') : 2),
@@ -52,7 +83,10 @@ if ($host = getenv('HOST')) {
     ]));
     if ($forceOverwriteHost) {
         $CONFIG['overwritehost'] = $host;
-        $CONFIG['overwrite.cli.url'] = getenv('SELF_CHECK_URL') ?: ((getenv('PROTOCOL') ?: 'https') . '://' . $host);
+        $CONFIG['overwrite.cli.url'] = addWebrootToUrl(
+            getenv('SELF_CHECK_URL') ?: ((getenv('PROTOCOL') ?: 'https') . '://' . $host),
+            $webroot,
+        );
     }
 }
 
@@ -66,13 +100,13 @@ if ($selfCheckUrl = getenv('SELF_CHECK_URL')) {
             $selfCheckDomain,
         ])));
     }
-    $CONFIG['overwrite.cli.url'] = $selfCheckUrl;
+    $CONFIG['overwrite.cli.url'] = addWebrootToUrl($selfCheckUrl, $webroot);
 }
 
 $CONFIG['mail_from_address'] = getenv('MAIL_FROM_ADDRESS') ?: 'nextcloud';
 $CONFIG['mail_domain'] = getenv('MAIL_DOMAIN') ?: ($hostNoPort ?: 'localhost');
 
-if ($webroot = getenv('WEBROOT')) {
+if ($webroot !== '') {
     $CONFIG['overwritewebroot'] = $webroot;
 }
 

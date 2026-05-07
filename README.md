@@ -106,13 +106,14 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `PHP_FPM_HOST` (default `php-fpm`): upstream FastCGI host; set to `nextcloud-php-fpm` in the compose setup.
   - `PHP_FPM_PORT` (default `9000`): upstream FastCGI port.
   - `ROOT` (default `/app`): document root served by NGINX.
+  - `WEBROOT`: optional URL prefix such as `/nextcloud`; must match the PHP-FPM `WEBROOT` value.
 
 - **nextcloud-php-fpm**
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
   - `HOST`: public hostname (e.g. `cloud.example.com`); sets `overwritehost` and `trusted_domains`.
   - `PROTOCOL`: public protocol; default `https`.
   - `SELF_CHECK_URL`: public base URL used for generated CLI/self-check URLs; for local Compose typically `http://localhost:8824`.
-  - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot`.
+  - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot` and must match the NGINX `WEBROOT` value.
   - `DEBUG`: set to `1` to enable Nextcloud debug mode; default `0`.
   - `MYSQL_HOST`: database hostname; default `mysql`, set to `nextcloud-db` in the compose setup.
   - `MYSQL_USER`: database user; default `nextcloud`.
@@ -218,6 +219,7 @@ services:
     image: mwaeckerlin/nextcloud:nginx
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
+      WEBROOT:
     ports:
       - "8824:8080"
     volumes:
@@ -231,6 +233,7 @@ services:
     environment:
       HOST: localhost:8824
       PROTOCOL: http
+      WEBROOT:
       SELF_CHECK_URL: http://localhost:8824
       ADMIN_USER: admin
       MYSQL_HOST: nextcloud-db
@@ -317,6 +320,8 @@ networks:
 ```
 
 Security note: the browser should normally reach Collabora only through `nextcloud-nginx` on the same origin. Publishing an extra host port for the `collabora` service is useful for debugging, but unnecessary for normal operation and should be avoided in hardened deployments.
+
+Webroot note: if Nextcloud is published below a subpath such as `/nextcloud`, set `WEBROOT=/nextcloud` on both `nextcloud-nginx` and `nextcloud-php-fpm`. The browser entrypoint then becomes, for example, `http://localhost:8824/nextcloud`.
 
 Service roles:
 - [mwaeckerlin/nextcloud:nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud:php-fpm] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.

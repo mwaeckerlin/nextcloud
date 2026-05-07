@@ -115,6 +115,20 @@ function installNextcloudIfNeeded(): void
     logMessage('Installation did not complete within retry window');
 }
 
+function appendWebroot(string $url, string $webroot): string
+{
+    if ($webroot === '' || $url === '') {
+        return $url;
+    }
+    $webroot = '/' . trim($webroot, '/');
+    // Don't double-add the webroot if it's already present
+    $path = parse_url($url, PHP_URL_PATH) ?? '';
+    if ($path === $webroot || str_starts_with($path, $webroot . '/')) {
+        return $url;
+    }
+    return rtrim($url, '/') . $webroot;
+}
+
 function applyOfficeConfig(): void
 {
     $wopiUrl = getenv('OFFICE_WOPI_URL') ?: '';
@@ -130,13 +144,15 @@ function applyOfficeConfig(): void
 
     logMessage('Applying Office configuration from environment');
 
+    $webroot = trim(getenv('WEBROOT') ?: '', '/');
+
     [$code] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
     logMessage("app:install returned {$code}");
 
     [$code] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
     logMessage("app:enable returned {$code}");
 
-    $callbackUrl = getenv('OFFICE_CALLBACK_URL') ?: '';
+    $callbackUrl = appendWebroot(getenv('OFFICE_CALLBACK_URL') ?: '', $webroot);
     if ($callbackUrl !== '') {
         [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--callback-url=' . $callbackUrl, '--no-ansi']);
         logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
@@ -153,7 +169,7 @@ function applyOfficeConfig(): void
         logMessage("wopi_callback_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
-    $publicWopiUrl = getenv('OFFICE_PUBLIC_WOPI_URL') ?: '';
+    $publicWopiUrl = appendWebroot(getenv('OFFICE_PUBLIC_WOPI_URL') ?: '', $webroot);
     if ($publicWopiUrl !== '') {
         [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
         logMessage("public_wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));

@@ -9,6 +9,7 @@ services:
       - apps:/app/custom_apps:ro
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
+      WEBROOT:
     depends_on:
       nextcloud-php-fpm:
         condition: service_started
@@ -23,6 +24,7 @@ services:
     environment:
       HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
+      WEBROOT:
       SELF_CHECK_URL: ${SELF_CHECK_URL:-http://localhost:8824}
       OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
     secrets:
@@ -56,8 +58,6 @@ services:
       extra_params: --o:ssl.enable=false --o:ssl.termination=false
     cap_add:
       - MKNOD
-    ports:
-      - "9983:9980"
     networks:
       - collabora-network
 
