@@ -1,12 +1,9 @@
 services:
   traefik:
     image: traefik
-    environment:
-      DOCKER_API_VERSION: "1.44"
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=ingress
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
@@ -26,7 +23,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - traefik-letsencrypt:/letsencrypt
     networks:
       - ingress
@@ -46,30 +43,6 @@ services:
       - php-network
       - collabora-network
       - ingress
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=ingress
-
-      # Canonical app router on apex domain.
-      - traefik.http.routers.nextcloud.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.nextcloud.entrypoints=websecure
-      - traefik.http.routers.nextcloud.tls=true
-      - traefik.http.routers.nextcloud.tls.certresolver=letsencrypt
-      - traefik.http.routers.nextcloud.service=nextcloud
-
-      # Redirect www to apex on HTTPS.
-      - traefik.http.routers.nextcloud-www.rule=Host(`www.${DOMAIN}`)
-      - traefik.http.routers.nextcloud-www.entrypoints=websecure
-      - traefik.http.routers.nextcloud-www.tls=true
-      - traefik.http.routers.nextcloud-www.tls.certresolver=letsencrypt
-      - traefik.http.routers.nextcloud-www.middlewares=redirect-www-to-apex
-      - traefik.http.routers.nextcloud-www.service=nextcloud
-
-      - traefik.http.middlewares.redirect-www-to-apex.redirectregex.regex=^https://www\.(.+)
-      - traefik.http.middlewares.redirect-www-to-apex.redirectregex.replacement=https://$${1}
-      - traefik.http.middlewares.redirect-www-to-apex.redirectregex.permanent=true
-
-      - traefik.http.services.nextcloud.loadbalancer.server.port=8080
 
   nextcloud-php-fpm:
     image: mwaeckerlin/nextcloud:php-fpm

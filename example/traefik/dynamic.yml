@@ -1,0 +1,32 @@
+http:
+  routers:
+    nextcloud-www:
+      entryPoints:
+        - websecure
+      rule: "HostRegexp(`www.{host:.+}`)"
+      middlewares:
+        - redirect-www-to-apex
+      service: nextcloud
+      tls:
+        certResolver: letsencrypt
+
+    nextcloud:
+      entryPoints:
+        - websecure
+      rule: "HostRegexp(`{host:.+}`)"
+      service: nextcloud
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    redirect-www-to-apex:
+      redirectRegex:
+        regex: "^https://www\\.(.+)"
+        replacement: "https://${1}"
+        permanent: true
+
+  services:
+    nextcloud:
+      loadBalancer:
+        servers:
+          - url: "http://nextcloud-nginx:8080"
