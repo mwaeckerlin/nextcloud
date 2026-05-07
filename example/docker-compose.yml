@@ -1,6 +1,8 @@
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik
+    environment:
+      DOCKER_API_VERSION: "1.44"
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -106,7 +108,7 @@ services:
       - collabora-network
 
   nextcloud-db:
-    image: mariadb:11.8
+    image: mariadb
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud

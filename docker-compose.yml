@@ -61,7 +61,7 @@ services:
       - collabora-network
 
   nextcloud-db:
-    image: mariadb:11.8
+    image: mariadb
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
