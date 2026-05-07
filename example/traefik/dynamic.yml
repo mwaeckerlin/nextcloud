@@ -14,7 +14,7 @@ http:
     nextcloud:
       entryPoints:
         - websecure
-      rule: "HostRegexp(`^.+$`)"
+      rule: "PathPrefix(`/`)"
       priority: 100
       service: nextcloud
       tls:

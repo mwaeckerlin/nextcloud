@@ -2,6 +2,7 @@ services:
   traefik:
     image: traefik
     command:
+      - --providers.docker=false
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
