@@ -48,6 +48,7 @@ services:
       - ingress
     labels:
       - traefik.enable=true
+      - traefik.docker.network=ingress
 
       # Canonical app router on apex domain.
       - traefik.http.routers.nextcloud.rule=Host(`${DOMAIN}`)
@@ -151,6 +152,7 @@ volumes:
 
 networks:
   ingress:
+    name: ingress
   php-network:
     driver_opts:
       encrypted: 1
