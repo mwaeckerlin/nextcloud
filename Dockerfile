@@ -1,5 +1,5 @@
 ARG VERSION="latest"
-FROM mwaeckerlin/ubuntu-base:${VERSION}
+FROM mwaeckerlin/ubuntu-base:${VERSION} AS production
 
 EXPOSE 80
 ENV MEMORY_LIMIT "1000M"
@@ -29,6 +29,10 @@ ADD nextcloud.asc /nextcloud.asc
 ADD start.sh /start.sh
 ADD nextcloud.conf /nextcloud.conf
 
+# The ubuntu-base image sets USER to an unprivileged account via ONBUILD.
+# Package installation and writes under /var require root privileges.
+USER root
+
 # libmagickcore-extra php-mcrypt
 RUN apt-get update \
       && apt-get install --no-install-recommends --no-install-suggests -y \
@@ -36,7 +40,7 @@ RUN apt-get update \
       php-json php-mysql php-curl php-mbstring php-intl \
       php-imagick php-xml php-zip php-apcu php-ldap \
       rsync php-imagick wget cron mysql-client php-bcmath php-gmp \
-      && /cleanup.sh \
+      && bash -c "$CLEANUP" \
       && mkdir -p "${INSTDIR}" \
       && wget -qO${SOURCE_FILE} ${SOURCE} \
       && wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc \
@@ -61,3 +65,6 @@ VOLUME $DATADIR
 VOLUME $CONFDIR
 VOLUME $APPSDIR
 WORKDIR $INSTDIR
+CMD ["/start.sh"]
+
+FROM production
