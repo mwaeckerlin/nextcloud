@@ -267,7 +267,7 @@ function applyOfficeConfig(): void
         return;
     }
 
-    $wopiUrl = resolveWopiUrl($configuredWopiUrl);
+    $wopiDiscoveryUrl = resolveWopiUrl($configuredWopiUrl);
 
     if (!isInstalled()) {
         logMessage('Nextcloud still not installed, skipping Office configuration');
@@ -277,6 +277,12 @@ function applyOfficeConfig(): void
     logMessage('Applying Office configuration from environment');
 
     $webroot = trim(getenv('WEBROOT') ?: '', '/');
+    $publicWopiUrl = appendWebroot(getenv('OFFICE_PUBLIC_WOPI_URL') ?: '', $webroot);
+    $wopiUrlForAppConfig = $publicWopiUrl !== '' ? $publicWopiUrl : $wopiDiscoveryUrl;
+
+    if ($wopiUrlForAppConfig !== $wopiDiscoveryUrl) {
+        logMessage("Using '{$wopiDiscoveryUrl}' for discovery checks and '{$wopiUrlForAppConfig}' for browser-facing Office URLs");
+    }
 
     [$code] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
     logMessage("app:install returned {$code}");
@@ -286,14 +292,14 @@ function applyOfficeConfig(): void
 
     $callbackUrl = appendWebroot(getenv('OFFICE_CALLBACK_URL') ?: '', $webroot);
     if ($callbackUrl !== '') {
-        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--callback-url=' . $callbackUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--callback-url=' . $callbackUrl, '--no-ansi']);
         logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     } else {
-        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrl, '--no-ansi']);
+        [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--no-ansi']);
         logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiUrlForAppConfig, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
     logMessage("wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     if ($callbackUrl !== '') {
@@ -301,7 +307,6 @@ function applyOfficeConfig(): void
         logMessage("wopi_callback_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
-    $publicWopiUrl = appendWebroot(getenv('OFFICE_PUBLIC_WOPI_URL') ?: '', $webroot);
     if ($publicWopiUrl !== '') {
         [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
         logMessage("public_wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
