@@ -1,5 +1,15 @@
 http:
   routers:
+    collabora:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/browser`) || PathPrefix(`/cool`) ||
+        Path(`/hosting/discovery`) || Path(`/hosting/capabilities`)"
+      priority: 300
+      service: collabora
+      tls:
+        certResolver: letsencrypt
+
     nextcloud-www:
       entryPoints:
         - websecure
@@ -28,6 +38,11 @@ http:
         permanent: true
 
   services:
+    collabora:
+      loadBalancer:
+        servers:
+          - url: "http://collabora:9980"
+
     nextcloud:
       loadBalancer:
         servers:
