@@ -3,7 +3,8 @@ http:
     nextcloud-www:
       entryPoints:
         - websecure
-      rule: "HostRegexp(`www.{host:.+}`)"
+      rule: "HostRegexp(`^www\\..+$`)"
+      priority: 200
       middlewares:
         - redirect-www-to-apex
       service: nextcloud
@@ -13,7 +14,8 @@ http:
     nextcloud:
       entryPoints:
         - websecure
-      rule: "HostRegexp(`{host:.+}`)"
+      rule: "HostRegexp(`^.+$`)"
+      priority: 100
       service: nextcloud
       tls:
         certResolver: letsencrypt
