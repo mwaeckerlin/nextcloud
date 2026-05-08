@@ -47,13 +47,12 @@ services:
   nextcloud-php-fpm:
     image: mwaeckerlin/nextcloud:php-fpm
     environment:
-      HOST: ${HOST:-localhost:8824}
-      PROTOCOL: ${PROTOCOL:-https}
+      HOST:
+      PROTOCOL:
       WEBROOT:
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
-      OFFICE_WOPI_URL: http://collabora:9980
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
