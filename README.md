@@ -111,6 +111,7 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
 - **nextcloud-php-fpm**
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
   - `HOST`: public hostname (e.g. `cloud.example.com`); default `localhost:8824`, always extends `trusted_domains`, and is used as the base for generated public URLs.
+  - `DOMAIN`: legacy alias for `HOST` (kept for backwards compatibility in startup/runtime fallback logic).
   - `PROTOCOL`: public protocol; default `https`.
   - `SELF_CHECK_URL`: optional override for the generated CLI/self-check URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot` and must match the NGINX `WEBROOT` value.

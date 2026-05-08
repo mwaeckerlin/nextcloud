@@ -33,8 +33,33 @@ function addWebrootToUrl(string $url, string $webroot): string
 $webroot = getenv('WEBROOT');
 $webroot = is_string($webroot) && trim($webroot, '/') !== '' ? '/' . trim($webroot, '/') : '';
 
+function resolvePublicHost(): string
+{
+    $host = trim((string) (getenv('HOST') ?: ''));
+    if ($host !== '') {
+        return $host;
+    }
+
+    // Backward-compatible alias for older compose setups.
+    $domain = trim((string) (getenv('DOMAIN') ?: ''));
+    if ($domain !== '') {
+        return $domain;
+    }
+
+    $selfCheckUrl = trim((string) (getenv('SELF_CHECK_URL') ?: ''));
+    if ($selfCheckUrl !== '') {
+        $selfCheckHost = (string) (parse_url($selfCheckUrl, PHP_URL_HOST) ?: '');
+        if ($selfCheckHost !== '') {
+            $selfCheckPort = parse_url($selfCheckUrl, PHP_URL_PORT);
+            return $selfCheckPort ? $selfCheckHost . ':' . $selfCheckPort : $selfCheckHost;
+        }
+    }
+
+    return 'localhost:8824';
+}
+
 $protocol = getenv('PROTOCOL') ?: 'https';
-$host = getenv('HOST') ?: 'localhost:8824';
+$host = resolvePublicHost();
 $defaultSelfCheckUrl = $protocol . '://' . $host;
 $selfCheckUrl = getenv('SELF_CHECK_URL') ?: $defaultSelfCheckUrl;
 

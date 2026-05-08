@@ -227,10 +227,35 @@ function resolveWopiUrl(string $configuredWopiUrl): string
     return $configuredWopiUrl;
 }
 
+function resolvePublicHost(): string
+{
+    $host = trim((string) (getenv('HOST') ?: ''));
+    if ($host !== '') {
+        return $host;
+    }
+
+    // Backward-compatible alias for older compose setups.
+    $domain = trim((string) (getenv('DOMAIN') ?: ''));
+    if ($domain !== '') {
+        return $domain;
+    }
+
+    $selfCheckUrl = trim((string) (getenv('SELF_CHECK_URL') ?: ''));
+    if ($selfCheckUrl !== '') {
+        $selfCheckHost = (string) (parse_url($selfCheckUrl, PHP_URL_HOST) ?: '');
+        if ($selfCheckHost !== '') {
+            $selfCheckPort = parse_url($selfCheckUrl, PHP_URL_PORT);
+            return $selfCheckPort ? $selfCheckHost . ':' . $selfCheckPort : $selfCheckHost;
+        }
+    }
+
+    return 'localhost:8824';
+}
+
 function getPublicBaseUrl(string $webroot): string
 {
     $protocol = getenv('PROTOCOL') ?: 'https';
-    $host = getenv('HOST') ?: 'localhost:8824';
+    $host = resolvePublicHost();
 
     return appendWebroot($protocol . '://' . $host, $webroot);
 }
