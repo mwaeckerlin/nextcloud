@@ -103,24 +103,24 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
 ## Environment Variables
 
 - **nextcloud-nginx**
-  - `PHP_FPM_HOST` (default `php-fpm`): upstream FastCGI host; set to `nextcloud-php-fpm` in the compose setup.
+  - `PHP_FPM_HOST` (default `nextcloud-php-fpm`): upstream FastCGI host.
   - `PHP_FPM_PORT` (default `9000`): upstream FastCGI port.
   - `ROOT` (default `/app`): document root served by NGINX.
   - `WEBROOT`: optional URL prefix such as `/nextcloud`; must match the PHP-FPM `WEBROOT` value.
 
 - **nextcloud-php-fpm**
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
-  - `HOST`: public hostname (e.g. `cloud.example.com`); sets `overwritehost` and `trusted_domains`.
+  - `HOST`: public hostname (e.g. `cloud.example.com`); default `localhost:8824`, always extends `trusted_domains`, and is used as the base for generated public URLs.
   - `PROTOCOL`: public protocol; default `https`.
-  - `SELF_CHECK_URL`: public base URL used for generated CLI/self-check URLs; for local Compose typically `http://localhost:8824`.
+  - `SELF_CHECK_URL`: optional override for the generated CLI/self-check URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot` and must match the NGINX `WEBROOT` value.
   - `DEBUG`: set to `1` to enable Nextcloud debug mode; default `0`.
   - `MYSQL_HOST`: database hostname; default `mysql`, set to `nextcloud-db` in the compose setup.
   - `MYSQL_USER`: database user; default `nextcloud`.
   - `MYSQL_DATABASE`: database name; default `nextcloud`.
   - `OFFICE_WOPI_URL`: internal Collabora endpoint; default `http://collabora:9980`.
-  - `OFFICE_PUBLIC_WOPI_URL`: internal Nextcloud URL used by Collabora to fetch WOPI settings/templates; default `http://nextcloud-nginx:8080`.
-  - `OFFICE_CALLBACK_URL`: internal callback URL used by Collabora; default `http://nextcloud-nginx:8080`.
+  - `OFFICE_PUBLIC_WOPI_URL`: optional override for the public WOPI URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
+  - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
 
 - **collabora**
   - `COLLABORA_SERVER_NAME`: browser-visible host name for the office frontend; defaults to `HOST`.
@@ -218,7 +218,6 @@ services:
   nextcloud-nginx:
     image: mwaeckerlin/nextcloud:nginx
     environment:
-      PHP_FPM_HOST: nextcloud-php-fpm
       WEBROOT:
     ports:
       - "8824:8080"
@@ -234,12 +233,10 @@ services:
       HOST: localhost:8824
       PROTOCOL: http
       WEBROOT:
-      SELF_CHECK_URL: http://localhost:8824
       ADMIN_USER: admin
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
-      OFFICE_PUBLIC_WOPI_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -401,8 +398,8 @@ If these two perspectives are mixed, typical symptoms are endless editor reloads
 For this Compose topology, the following mapping has proven reliable:
 
 - `richdocuments.wopi_url`: `http://collabora:9980`
-- `richdocuments.public_wopi_url`: `http://nextcloud-nginx:8080`
-- `richdocuments.wopi_callback_url`: `http://nextcloud-nginx:8080`
+- `richdocuments.public_wopi_url`: browser-visible base URL, normally derived from `PROTOCOL://HOST[/WEBROOT]`
+- `richdocuments.wopi_callback_url`: internal Nextcloud base URL, normally derived from `http://nextcloud-nginx:8080[/WEBROOT]`
 - Collabora `aliasgroup1`: includes internal `http://nextcloud-nginx:8080` and optionally the local browser host.
 
 Important: from inside the Collabora container, `localhost` means the container itself, not the Docker host and not the Nextcloud NGINX service.
@@ -432,11 +429,15 @@ This keeps browser links correct while letting Collabora reliably reach internal
 The integration remains reproducible with fresh volumes if the following points are in place:
 
 1. The Dockerfile includes office defaults (`OFFICE_WOPI_URL`, `OFFICE_PUBLIC_WOPI_URL`, `OFFICE_CALLBACK_URL`) and the bootstrap entrypoint.
+  Public and callback URLs are intentionally empty by default and auto-generated from `HOST`, `PROTOCOL` and `WEBROOT`.
 2. `office-bootstrap.php` installs/enables `richdocuments` and sets required app values via `occ`.
 3. `custom.config.php` is always loaded (either from the image or as a bind mount, as in this Compose file).
 4. With an empty `config` volume, `autoconfig.php` is provided automatically and first-time setup runs headless.
 
 This ensures behavior is not dependent on old volume state.
+
+For local Docker Compose, the callback must stay internal even when the browser host is `localhost:8824`.
+Otherwise Collabora sends WOPI requests back to itself and answers with `Unauthorized WOPI host`.
 
 ### Common pitfalls
 

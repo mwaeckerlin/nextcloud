@@ -5,11 +5,10 @@ services:
       service: nextcloud-nginx
     ports:
       - "8824:8080"
+    environment:
+      WEBROOT:
     volumes:
       - apps:/app/custom_apps:ro
-    environment:
-      PHP_FPM_HOST: nextcloud-php-fpm
-      WEBROOT:
     depends_on:
       nextcloud-php-fpm:
         condition: service_started
@@ -25,9 +24,6 @@ services:
       HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
       WEBROOT:
-      SELF_CHECK_URL: ${SELF_CHECK_URL:-http://localhost:8824}
-      OFFICE_PUBLIC_WOPI_URL: ${SELF_CHECK_URL:-http://localhost:8824}
-      OFFICE_CALLBACK_URL: http://nextcloud-nginx:8080
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -52,7 +48,7 @@ services:
   collabora:
     image: collabora/code
     environment:
-      server_name: ${COLLABORA_SERVER_NAME:-${HOST:-localhost:8824}}
+      server_name: ${HOST:-localhost:8824}
       domain: nextcloud-nginx|localhost
       aliasgroup1: http://nextcloud-nginx:8080,http://localhost:8824
       extra_params: --o:ssl.enable=false --o:ssl.termination=false

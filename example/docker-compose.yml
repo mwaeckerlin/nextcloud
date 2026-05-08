@@ -31,10 +31,8 @@ services:
     restart: unless-stopped
 
   nextcloud-nginx:
-    build: ../nginx
     image: mwaeckerlin/nextcloud:nginx
     environment:
-      PHP_FPM_HOST: nextcloud-php-fpm
       WEBROOT:
     volumes:
       - apps:/app/custom_apps:ro
@@ -47,20 +45,15 @@ services:
       - ingress
 
   nextcloud-php-fpm:
-    build: ../php-fpm
     image: mwaeckerlin/nextcloud:php-fpm
     environment:
-      HOST: ${DOMAIN}
-      PROTOCOL: https
-      FORCE_OVERWRITEHOST: "1"
+      HOST: ${HOST:-localhost:8824}
+      PROTOCOL: ${PROTOCOL:-https}
       WEBROOT:
-      SELF_CHECK_URL: https://${DOMAIN}
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
       OFFICE_WOPI_URL: http://collabora:9980
-      OFFICE_PUBLIC_WOPI_URL: https://${DOMAIN}
-      OFFICE_CALLBACK_URL: https://${DOMAIN}
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -85,16 +78,16 @@ services:
   collabora:
     image: collabora/code
     environment:
-      server_name: ${DOMAIN}
-      domain: nextcloud-nginx|${DOMAIN}|www.${DOMAIN}
-      aliasgroup1: http://nextcloud-nginx:8080,https://${DOMAIN},https://www.${DOMAIN}
+      server_name: ${HOST}
+      domain: nextcloud-nginx|${HOST}|www.${HOST}
+      aliasgroup1: http://nextcloud-nginx:8080,https://${HOST},https://www.${HOST}
       extra_params: --o:ssl.enable=false --o:ssl.termination=true
     cap_add:
       - MKNOD
     networks:
       collabora-network:
         aliases:
-          - ${DOMAIN}
+          - ${HOST}
       ingress:
 
   nextcloud-db:

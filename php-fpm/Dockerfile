@@ -15,7 +15,7 @@ RUN ${PKG_INSTALL} php
 FROM mwaeckerlin/php-fpm AS production
 ENV ADMIN_USER "admin"
 ENV ADMIN_PWD ""
-ENV HOST ""
+ENV HOST "localhost:8824"
 ENV PROTOCOL "https"
 ENV WEBROOT ""
 ENV DEBUG "0"
@@ -24,8 +24,8 @@ ENV MYSQL_USER "nextcloud"
 ENV MYSQL_DATABASE "nextcloud"
 ENV MYSQL_PASSWORD ""
 ENV OFFICE_WOPI_URL "http://collabora:9980"
-ENV OFFICE_PUBLIC_WOPI_URL "http://nextcloud-nginx:8080"
-ENV OFFICE_CALLBACK_URL "http://nextcloud-nginx:8080"
+ENV OFFICE_PUBLIC_WOPI_URL ""
+ENV OFFICE_CALLBACK_URL ""
 ENV OFFICE_WOPI_ALLOWLIST ""
 COPY --from=build /app /app
 COPY --from=build /usr/bin/php /usr/bin/php

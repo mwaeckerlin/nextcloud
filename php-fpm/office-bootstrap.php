@@ -219,44 +219,25 @@ function appendWebroot(string $url, string $webroot): string
     return rtrim($url, '/') . $webroot;
 }
 
-function hasValidWopiDiscovery(string $wopiUrl): bool
-{
-    $discoveryUrl = rtrim($wopiUrl, '/') . '/hosting/discovery';
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'timeout' => 5,
-            'ignore_errors' => true,
-        ],
-    ]);
-
-    $xml = @file_get_contents($discoveryUrl, false, $context);
-    if (!is_string($xml)) {
-        return false;
-    }
-
-    $xml = trim($xml);
-    if ($xml === '') {
-        return false;
-    }
-
-    return strpos($xml, '<wopi-discovery') !== false;
-}
-
 function resolveWopiUrl(string $configuredWopiUrl): string
 {
-    if (hasValidWopiDiscovery($configuredWopiUrl)) {
-        return $configuredWopiUrl;
-    }
-
-    $fallback = 'http://collabora:9980';
-    if ($configuredWopiUrl !== $fallback && hasValidWopiDiscovery($fallback)) {
-        logMessage("Configured OFFICE_WOPI_URL '{$configuredWopiUrl}' has no valid discovery XML, falling back to '{$fallback}'");
-        return $fallback;
-    }
-
-    logMessage("Configured OFFICE_WOPI_URL '{$configuredWopiUrl}' has no valid discovery XML and fallback is unavailable");
+    // Use the configured URL as-is for discovery (internal container networking)
+    // Don't validate at bootstrap time - Collabora may not be ready yet
+    // Richdocuments app will validate when actually needed at token generation
     return $configuredWopiUrl;
+}
+
+function getPublicBaseUrl(string $webroot): string
+{
+    $protocol = getenv('PROTOCOL') ?: 'https';
+    $host = getenv('HOST') ?: 'localhost:8824';
+
+    return appendWebroot($protocol . '://' . $host, $webroot);
+}
+
+function getInternalBaseUrl(string $webroot): string
+{
+    return appendWebroot('http://nextcloud-nginx:8080', $webroot);
 }
 
 function applyOfficeConfig(): void
@@ -277,8 +258,25 @@ function applyOfficeConfig(): void
     logMessage('Applying Office configuration from environment');
 
     $webroot = trim(getenv('WEBROOT') ?: '', '/');
-    $publicWopiUrl = appendWebroot(getenv('OFFICE_PUBLIC_WOPI_URL') ?: '', $webroot);
     $wopiUrlForAppConfig = $wopiDiscoveryUrl;
+    $publicBaseUrl = getPublicBaseUrl($webroot);
+    $internalBaseUrl = getInternalBaseUrl($webroot);
+
+    // Generate public WOPI URL if not explicitly set
+    // Priority: explicit OFFICE_PUBLIC_WOPI_URL > auto-generate from HOST + PROTOCOL
+    $publicWopiUrl = getenv('OFFICE_PUBLIC_WOPI_URL') ?: '';
+    if ($publicWopiUrl === '') {
+        $publicWopiUrl = $publicBaseUrl;
+        logMessage("Auto-generated public WOPI URL from HOST/PROTOCOL: '{$publicWopiUrl}'");
+    }
+
+    // Generate callback URL if not explicitly set
+    // Priority: explicit OFFICE_CALLBACK_URL > internal nginx service URL
+    $callbackUrl = getenv('OFFICE_CALLBACK_URL') ?: '';
+    if ($callbackUrl === '') {
+        $callbackUrl = $internalBaseUrl;
+        logMessage("Auto-generated callback URL from internal nginx service: '{$callbackUrl}'");
+    }
 
     if ($publicWopiUrl !== '' && $publicWopiUrl !== $wopiDiscoveryUrl) {
         logMessage("Using '{$wopiDiscoveryUrl}' for discovery and '{$publicWopiUrl}' as public WOPI URL");
@@ -290,7 +288,6 @@ function applyOfficeConfig(): void
     [$code] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
     logMessage("app:enable returned {$code}");
 
-    $callbackUrl = appendWebroot(getenv('OFFICE_CALLBACK_URL') ?: '', $webroot);
     if ($callbackUrl !== '') {
         [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--callback-url=' . $callbackUrl, '--no-ansi']);
         logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));

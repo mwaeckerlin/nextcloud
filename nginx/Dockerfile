@@ -11,6 +11,7 @@ RUN find . -name '*.php' -exec sh -c 'rm "{}" && touch "{}"' \;
 
 FROM mwaeckerlin/nginx AS production
 ENV CONTAINERNAME "nextcloud-nginx"
+ENV PHP_FPM_HOST "nextcloud-php-fpm"
 ENV WEBROOT ""
 COPY conf/server.d/default.conf    /etc/nginx.template/server.d/default.conf
 COPY --from=build /app /app
