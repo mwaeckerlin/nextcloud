@@ -31,6 +31,7 @@ services:
     restart: unless-stopped
 
   nextcloud-nginx:
+    build: ../nginx
     image: mwaeckerlin/nextcloud:nginx
     environment:
       PHP_FPM_HOST: nextcloud-php-fpm
@@ -46,6 +47,7 @@ services:
       - ingress
 
   nextcloud-php-fpm:
+    build: ../php-fpm
     image: mwaeckerlin/nextcloud:php-fpm
     environment:
       HOST: ${DOMAIN}

@@ -278,10 +278,10 @@ function applyOfficeConfig(): void
 
     $webroot = trim(getenv('WEBROOT') ?: '', '/');
     $publicWopiUrl = appendWebroot(getenv('OFFICE_PUBLIC_WOPI_URL') ?: '', $webroot);
-    $wopiUrlForAppConfig = $publicWopiUrl !== '' ? $publicWopiUrl : $wopiDiscoveryUrl;
+    $wopiUrlForAppConfig = $wopiDiscoveryUrl;
 
-    if ($wopiUrlForAppConfig !== $wopiDiscoveryUrl) {
-        logMessage("Using '{$wopiDiscoveryUrl}' for discovery checks and '{$wopiUrlForAppConfig}' for browser-facing Office URLs");
+    if ($publicWopiUrl !== '' && $publicWopiUrl !== $wopiDiscoveryUrl) {
+        logMessage("Using '{$wopiDiscoveryUrl}' for discovery and '{$publicWopiUrl}' as public WOPI URL");
     }
 
     [$code] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
@@ -299,7 +299,7 @@ function applyOfficeConfig(): void
         logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
     }
 
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiUrlForAppConfig, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiDiscoveryUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
     logMessage("wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     if ($callbackUrl !== '') {
