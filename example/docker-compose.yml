@@ -27,7 +27,7 @@ services:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - traefik-letsencrypt:/letsencrypt
     networks:
-      - ingress
+      - traefik-nginx
     restart: unless-stopped
 
   nextcloud-nginx:
@@ -42,14 +42,14 @@ services:
     networks:
       - php-network
       - collabora-network
-      - ingress
+      - traefik-nginx
 
   nextcloud-php-fpm:
     image: mwaeckerlin/nextcloud:php-fpm
     environment:
-      HOST:
-      PROTOCOL:
-      WEBROOT:
+      HOST: ${HOST}
+      PROTOCOL: ${PROTOCOL:-https}
+      WEBROOT: ${WEBROOT}
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud
@@ -62,6 +62,8 @@ services:
       - apps:/app/custom_apps
     depends_on:
       nextcloud-db:
+        condition: service_started
+      collabora:
         condition: service_started
     networks:
       - php-network
@@ -87,7 +89,7 @@ services:
       collabora-network:
         aliases:
           - ${HOST}
-      ingress:
+      traefik-nginx:
 
   nextcloud-db:
     image: mariadb
@@ -124,8 +126,9 @@ volumes:
   db:
 
 networks:
-  ingress:
-    name: ingress
+  traefik-nginx:
+    driver_opts:
+      encrypted: 1
   php-network:
     driver_opts:
       encrypted: 1

@@ -6,15 +6,15 @@ services:
     ports:
       - "8824:8080"
     environment:
-      WEBROOT:
+      WEBROOT: ${WEBROOT}
     volumes:
       - apps:/app/custom_apps:ro
     depends_on:
       nextcloud-php-fpm:
         condition: service_started
     networks:
-      - php-network
-      - collabora-network
+      - nxinx-php
+      - nginx-collabora
 
   nextcloud-php-fpm:
     extends:
@@ -23,7 +23,7 @@ services:
     environment:
       HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
-      WEBROOT:
+      WEBROOT: ${WEBROOT}
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -34,16 +34,18 @@ services:
     depends_on:
       nextcloud-db:
         condition: service_started
+      collabora:
+        condition: service_started
     networks:
-      - php-network
-      - db-network
-      - smtp-network
-      - collabora-network
+      - nxinx-php
+      - php-db
+      - php-smtp
+      - php-collabora
 
   smtp-relay:
     image: mwaeckerlin/smtp-relay
     networks:
-      - smtp-network
+      - php-smtp
 
   collabora:
     image: collabora/code
@@ -55,7 +57,8 @@ services:
     cap_add:
       - MKNOD
     networks:
-      - collabora-network
+      - nginx-collabora
+      - php-collabora
 
   nextcloud-db:
     image: mariadb
@@ -69,7 +72,7 @@ services:
     volumes:
       - db:/var/lib/mysql
     networks:
-      - db-network
+      - php-db
 
   access-fix:
     image: mwaeckerlin/allow-write-access
@@ -94,15 +97,18 @@ volumes:
 
 
 networks:
-  php-network:
+  nxinx-php:
     driver_opts:
       encrypted: 1
-  db-network:
+  php-db:
     driver_opts:
       encrypted: 1
-  smtp-network:
+  php-smtp:
     driver_opts:
       encrypted: 1
-  collabora-network:
+  nginx-collabora:
+    driver_opts:
+      encrypted: 1
+  php-collabora:
     driver_opts:
       encrypted: 1
