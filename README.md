@@ -342,6 +342,80 @@ In the best setup, four distinct networks are used, each encrypted and locked do
 - For hardened deployments, no direct browser-facing port is needed on `collabora`; only NGINX should be published.
 
 
+## WebSocket Apps (Realtime Backends)
+
+Some Nextcloud apps ship a realtime backend that needs WebSocket support
+(e.g. push notifications, collaborative editing, live dashboards). PHP-FPM
+cannot serve WebSockets, so the upgrade must happen at NGINX.
+
+`mwaeckerlin/nextcloud:nginx` ships with a generic, same-origin
+WebSocket reverse proxy convention so that apps installed from the
+Nextcloud app store (or via `docker compose`) work **out of the box,
+without editing any NGINX configuration**:
+
+1. **Service naming**: the app's WebSocket backend runs as a
+   `docker-compose` service named **`<appid>-ws`** on internal port
+   **`3001`**.
+2. **Network**: the service is attached to the same Docker network as
+   `nextcloud-nginx` (Docker's embedded DNS at `127.0.0.11` resolves the
+   name at request time).
+3. **Public URL**: clients connect to
+   **`ws(s)://<host>[<WEBROOT>]/ws/<appid>/<path>`**.
+
+NGINX strips `/ws/<appid>` and proxies `<path>` (and the query string)
+through to `http://<appid>-ws:3001/<path>` with the standard
+`Upgrade`/`Connection` headers and a 10-hour idle timeout. Because the
+WebSocket is served from the same origin as Nextcloud itself, the
+default `Content-Security-Policy: connect-src 'self'` allows it
+automatically — no CSP overrides needed.
+
+### Example: an app `parlwin` with a realtime backend
+
+`docker-compose.yml` fragment shipped by the app:
+
+```yaml
+services:
+  parlwin-ws:
+    image: my-org/parlwin-realtime:latest
+    environment:
+      PORT: 3001
+    networks:
+      - nextcloud-nginx-network    # same network as nextcloud-nginx
+```
+
+That's all the admin has to do. Frontend code uses:
+
+```js
+const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/parlwin/`;
+```
+
+Backend service-to-service calls (e.g. publishing events from PHP-FPM
+to the WS broker) still use the internal hostname directly
+(`http://parlwin-ws:3001/publish`), bypassing nginx.
+
+### Third-party apps with fixed paths
+
+Apps that hard-code a different path (e.g. Nextcloud's official
+`notify_push` uses `/push`, Talk's HPB uses `/standalone-signaling/`)
+can drop their own `.conf` snippet into `/etc/nginx/locations.d/`
+inside the `nextcloud-nginx` image (volume mount or derived image).
+The `$connection_upgrade` map is available globally, so snippets can
+simply use:
+
+```nginx
+location ^~ /push {
+  proxy_pass http://notify-push:7867;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
+  proxy_set_header Host $http_host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_read_timeout 36000s;
+}
+```
+
+
 ## Build and Development
 
 The images are available directly from Docker Hub, there is no need to build. But if you want to build them:
