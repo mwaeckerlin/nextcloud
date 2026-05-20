@@ -24,6 +24,7 @@ services:
       HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
       WEBROOT: ${WEBROOT}
+      MYSQL_HOST: nextcloud-db
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
