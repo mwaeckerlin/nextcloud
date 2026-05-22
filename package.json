@@ -1,10 +1,10 @@
 {
   "name": "@mwaeckerlin/nextcloud",
   "version": "1.0.0",
-  "private": true,
   "scripts": {
     "build": "docker compose build",
-    "start": "docker compose up -d --build --force-recreate --remove-orphans",
+    "start": "docker compose up --build --force-recreate --remove-orphans",
+    "start:daemon": "docker compose up -d --build --force-recreate --remove-orphans",
     "start:dev": "docker compose up --build --force-recreate --remove-orphans",
     "stop": "docker compose down",
     "test:e2e": "./tests/e2e/run-compose-e2e.sh",
