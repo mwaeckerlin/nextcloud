@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_BRANCH="${BASE_BRANCH:-new}"
-START_VERSION="${START_VERSION:-30"
-END_VERSION="${END_VERSION:-33}"
+START_VERSION="${START_VERSION:-30}"
+END_VERSION="${END_VERSION:-34}"
 
 if [[ "$#" -gt 0 ]]; then
     VERSIONS=("$@")
