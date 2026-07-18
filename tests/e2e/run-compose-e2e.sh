@@ -45,7 +45,7 @@ ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${NEXTCLOUD_ADMIN_PASSWORD:?NEXTCLOUD_ADMIN_PASSWORD missing}"
 
 cleanup() {
-  echo "[E2E] Stack abreissen"
+  echo "[E2E] Tearing down stack"
   docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   if [[ "$CLEANUP_ENV" == "1" ]]; then
     rm -f .env
@@ -53,14 +53,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() { echo "E2E FEHLER: $*" >&2; exit 1; }
+fail() { echo "E2E ERROR: $*" >&2; exit 1; }
 
-# --- Stack hochfahren --------------------------------------------------
-echo "[E2E] Stack bauen und starten"
+# --- Bring the stack up -------------------------------------------------
+echo "[E2E] Building and starting stack"
 docker compose up -d --build --force-recreate --remove-orphans >/dev/null
 
-# --- Warten bis Nextcloud installiert ist und richdocuments aktiv ist
-echo "[E2E] Warte bis Nextcloud installiert ist"
+# --- Wait until Nextcloud is installed and richdocuments is active ----
+echo "[E2E] Waiting until Nextcloud is installed"
 deadline=$(( $(date +%s) + 600 ))
 while :; do
   if docker compose exec -T nextcloud-php-fpm php /app/occ status --no-ansi 2>/dev/null \
@@ -69,12 +69,12 @@ while :; do
   fi
   if (( $(date +%s) > deadline )); then
     docker compose logs --tail=200 nextcloud-php-fpm >&2 || true
-    fail "Nextcloud wurde nicht rechtzeitig installiert"
+    fail "Nextcloud was not installed in time"
   fi
   sleep 5
 done
 
-echo "[E2E] Warte bis richdocuments aktiviert ist"
+echo "[E2E] Waiting until richdocuments is enabled"
 deadline=$(( $(date +%s) + 300 ))
 while :; do
   state=$(docker compose exec -T nextcloud-php-fpm \
@@ -86,7 +86,7 @@ while :; do
   fi
   if (( $(date +%s) > deadline )); then
     docker compose logs --tail=100 nextcloud-php-fpm >&2 || true
-    fail "richdocuments wurde nicht aktiviert (Status: '$state')"
+    fail "richdocuments was not enabled (status: '$state')"
   fi
   sleep 3
 done
@@ -97,71 +97,71 @@ occ() {
     | tr -d '\r'
 }
 
-# Host-seitiger curl gegen Nextcloud (Port ist auf den Host gemappt).
+# Host-side curl against Nextcloud (port is mapped to the host).
 nc_curl() {
   curl --silent --show-error --max-time 20 "$@"
 }
 
-# curl in einem temporären Container, das im internen Compose-Netz
-# 'php-collabora' hängt, damit der Hostname 'collabora' aufgelöst wird.
+# curl in a temporary container attached to the internal compose network
+# 'php-collabora', so the hostname 'collabora' resolves.
 COLLAB_NET="${COMPOSE_PROJECT_NAME}_php-collabora"
 collab_curl() {
   docker run --rm --network "$COLLAB_NET" curlimages/curl:8.10.1 \
     --silent --show-error --max-time 20 "$@"
 }
 
-# --- WOPI-Konfiguration -----------------------------------------------
-echo "[E2E] WOPI-Konfiguration prüfen"
+# --- WOPI configuration ------------------------------------------------
+echo "[E2E] Checking WOPI configuration"
 WOPI_URL=$(occ config:app:get richdocuments wopi_url | tail -n1)
 PUB_WOPI_URL=$(occ config:app:get richdocuments public_wopi_url | tail -n1)
 CB_URL=$(occ config:app:get richdocuments wopi_callback_url | tail -n1)
 
 [[ "$WOPI_URL" == http://collabora:9980* ]] \
-  || fail "wopi_url falsch konfiguriert: '$WOPI_URL'"
+  || fail "wopi_url misconfigured: '$WOPI_URL'"
 [[ "$PUB_WOPI_URL" == ${PROTOCOL_VALUE}://${HOST_VALUE}* ]] \
-  || fail "public_wopi_url falsch konfiguriert: '$PUB_WOPI_URL' (erwartet Prefix ${PROTOCOL_VALUE}://${HOST_VALUE})"
+  || fail "public_wopi_url misconfigured: '$PUB_WOPI_URL' (expected prefix ${PROTOCOL_VALUE}://${HOST_VALUE})"
 [[ "$CB_URL" == http://nextcloud-nginx:8080* ]] \
-  || fail "wopi_callback_url falsch konfiguriert: '$CB_URL'"
+  || fail "wopi_callback_url misconfigured: '$CB_URL'"
 
-# Webroot vom Callback ableiten (Default-Bild: WEBROOT=nextcloud)
+# Derive webroot from the callback (default image: WEBROOT=nextcloud)
 WEBROOT_PATH=${CB_URL#http://nextcloud-nginx:8080}
 WEBROOT_PATH=${WEBROOT_PATH%/}
-echo "[E2E] erkannter Webroot: '${WEBROOT_PATH:-/}'"
+echo "[E2E] detected webroot: '${WEBROOT_PATH:-/}'"
 
-# --- Collabora-Discovery + Capabilities -------------------------------
-echo "[E2E] Collabora /hosting/discovery prüfen"
+# --- Collabora discovery + capabilities -------------------------------
+echo "[E2E] Checking Collabora /hosting/discovery"
 DISCOVERY=$(collab_curl http://collabora:9980/hosting/discovery)
-grep -q '<wopi-discovery>' <<<"$DISCOVERY" || fail "wopi-discovery nicht gefunden"
+grep -q '<wopi-discovery>' <<<"$DISCOVERY" || fail "wopi-discovery not found"
 grep -Eq '(name="edit"[^>]*ext="odt")|(ext="odt"[^>]*name="edit")' <<<"$DISCOVERY" \
-  || fail "Collabora bietet keine edit-Action für odt an"
+  || fail "Collabora offers no edit action for odt"
 grep -Eq '(name="edit"[^>]*ext="docx")|(ext="docx"[^>]*name="edit")' <<<"$DISCOVERY" \
-  || fail "Collabora bietet keine edit-Action für docx an"
+  || fail "Collabora offers no edit action for docx"
 
-echo "[E2E] Collabora /hosting/capabilities prüfen"
+echo "[E2E] Checking Collabora /hosting/capabilities"
 CAPS=$(collab_curl http://collabora:9980/hosting/capabilities)
 jq -e '.hasMobileSupport == true' <<<"$CAPS" >/dev/null \
-  || fail "Collabora capabilities ohne hasMobileSupport"
+  || fail "Collabora capabilities without hasMobileSupport"
 jq -e '."convert-to".available == true' <<<"$CAPS" >/dev/null \
-  || fail "Collabora capabilities ohne convert-to"
+  || fail "Collabora capabilities without convert-to"
 
-# --- Testdokument via WebDAV hochladen und in Collabora oeffnen -------
-echo "[E2E] Testdokument bereitstellen"
+# --- Upload a test document via WebDAV and open it in Collabora -------
+echo "[E2E] Providing test document"
 TEST_DOC="e2e-collabora-test.odt"
 DAV_PUBLIC_BASE="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/remote.php/dav/files/${ADMIN_USER}"
 
 HOST_TMP=$(mktemp -d)
 trap 'rm -rf "$HOST_TMP"' RETURN 2>/dev/null || true
 
-# Leere Datei mit .odt-Endung. Nextcloud akzeptiert beliebige Inhalte
-# via WebDAV; der richdocuments-Controller rendert die Editor-Seite
-# anhand der File-ID, nicht des Inhalts.
+# Empty file with an .odt extension. Nextcloud accepts arbitrary content
+# via WebDAV; the richdocuments controller renders the editor page based
+# on the file ID, not the content.
 : > "${HOST_TMP}/${TEST_DOC}"
 
-echo "[E2E] Testdokument hochladen (${DAV_PUBLIC_BASE}/${TEST_DOC})"
+echo "[E2E] Uploading test document (${DAV_PUBLIC_BASE}/${TEST_DOC})"
 nc_curl --fail -u "${ADMIN_USER}:${ADMIN_PASS}" \
   -T "${HOST_TMP}/${TEST_DOC}" \
   "${DAV_PUBLIC_BASE}/${TEST_DOC}" >/dev/null \
-  || fail "WebDAV-Upload fehlgeschlagen"
+  || fail "WebDAV upload failed"
 
 FILE_ID=$(nc_curl -u "${ADMIN_USER}:${ADMIN_PASS}" -X PROPFIND \
   -H 'Depth: 0' \
@@ -171,10 +171,10 @@ FILE_ID=$(nc_curl -u "${ADMIN_USER}:${ADMIN_PASS}" -X PROPFIND \
   | grep -oE '<oc:fileid>[0-9]+</oc:fileid>' \
   | grep -oE '[0-9]+' \
   | head -n1)
-[[ -n "$FILE_ID" ]] || fail "Konnte fileid des Testdokuments nicht ermitteln"
+[[ -n "$FILE_ID" ]] || fail "Could not determine the test document's fileid"
 
-# --- richdocuments-Editor-Seite anfordern und WOPI-Daten verifizieren -
-echo "[E2E] richdocuments-Editor öffnen (fileId=${FILE_ID})"
+# --- Request the richdocuments editor page and verify WOPI data --------
+echo "[E2E] Opening richdocuments editor (fileId=${FILE_ID})"
 EDITOR_HTML=$(nc_curl -L -u "${ADMIN_USER}:${ADMIN_PASS}" \
   -H 'OCS-APIRequest: true' \
   "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/index.php/apps/richdocuments/index?fileId=${FILE_ID}")
@@ -182,13 +182,13 @@ EDITOR_HTML=$(nc_curl -L -u "${ADMIN_USER}:${ADMIN_PASS}" \
 if ! grep -Eq 'richdocuments-document\.js|initial-state-richdocuments|collabora[^"]*:?9980|/cool/|wopi(Src|_src|_token|_url)|access_token' <<<"$EDITOR_HTML"; then
   echo "--- editor html (head) ---" >&2
   head -c 4000 <<<"$EDITOR_HTML" >&2
-  fail "richdocuments-Editor-Seite enthält keine Collabora-/WOPI-Hinweise"
+  fail "richdocuments editor page contains no Collabora/WOPI hints"
 fi
 
-# Prüfe zusätzlich, dass der Editor für genau dieses Dokument geladen wird.
+# Additionally check that the editor is loaded for exactly this document.
 grep -Eq "fileId=${FILE_ID}|\"fileid\":${FILE_ID}|\"fileid\":\"${FILE_ID}\"|initial-state-richdocuments" <<<"$EDITOR_HTML" \
-  || fail "richdocuments-Editor-Seite referenziert FileID ${FILE_ID} nicht"
+  || fail "richdocuments editor page does not reference file ID ${FILE_ID}"
 
-echo "E2E erfolgreich: Stack hochgefahren, richdocuments aktiv, WOPI-URLs"
-echo "konfiguriert, Collabora-Discovery + Capabilities ok, Testdokument"
-echo "über richdocuments mit WOPI-Token öffnenbar."
+echo "E2E succeeded: stack up, richdocuments active, WOPI URLs"
+echo "configured, Collabora discovery + capabilities ok, test document"
+echo "openable through richdocuments with a WOPI token."
