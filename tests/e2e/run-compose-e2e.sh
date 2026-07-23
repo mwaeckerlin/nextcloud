@@ -111,8 +111,23 @@ collab_curl() {
 }
 
 # --- WOPI configuration ------------------------------------------------
+# `enabled: yes` does not mean the bootstrap already ran
+# richdocuments:activate-config — wait for the keys instead of reading
+# them once (an unset key exits occ non-zero, which under `set -e` would
+# kill the script without any diagnostic).
 echo "[E2E] Checking WOPI configuration"
-WOPI_URL=$(occ config:app:get richdocuments wopi_url | tail -n1)
+deadline=$(( $(date +%s) + 120 ))
+while :; do
+  WOPI_URL=$(occ config:app:get richdocuments wopi_url 2>/dev/null | tail -n1 || true)
+  if [[ -n "$WOPI_URL" ]]; then
+    break
+  fi
+  if (( $(date +%s) > deadline )); then
+    docker compose logs --tail=100 nextcloud-php-fpm >&2 || true
+    fail "richdocuments wopi_url was never configured (activate-config failed?)"
+  fi
+  sleep 3
+done
 PUB_WOPI_URL=$(occ config:app:get richdocuments public_wopi_url | tail -n1)
 CB_URL=$(occ config:app:get richdocuments wopi_callback_url | tail -n1)
 

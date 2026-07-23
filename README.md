@@ -122,6 +122,7 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `OFFICE_WOPI_URL`: internal Collabora endpoint; default `http://collabora:9980`.
   - `OFFICE_PUBLIC_WOPI_URL`: optional override for the public WOPI URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
+  - `APPSTORE_TIMEOUT`: app-store fetch timeout in seconds for installing `richdocuments`; default `600` (the ~12 MB store index aborts at Nextcloud's 120 s default on slow connections).
 
 - **collabora**
   - `COLLABORA_SERVER_NAME`: browser-visible host name for the office frontend; defaults to `HOST`.

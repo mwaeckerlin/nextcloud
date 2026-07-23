@@ -308,11 +308,22 @@ function applyOfficeConfig(): void
         logMessage("Using '{$wopiDiscoveryUrl}' for discovery and '{$publicWopiUrl}' as public WOPI URL");
     }
 
-    [$code] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
-    logMessage("app:install returned {$code}");
+    // The app store index (apps.json) is ~12 MB; on slow connections the
+    // default fetcher timeout of 120 s aborts mid-download and app:install
+    // fails with "not found on the appstore". Raise it before installing.
+    $appstoreTimeout = getenv('APPSTORE_TIMEOUT') ?: '600';
+    [$code, , $stderr] = runOcc(['config:app:set', 'settings', 'appstore-timeout', '--value=' . $appstoreTimeout, '--no-interaction', '--no-ansi']);
+    logMessage("appstore-timeout set to {$appstoreTimeout} returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
-    [$code] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
-    logMessage("app:enable returned {$code}");
+    // A previously failed fetch blocks all app store requests for 300 s
+    // (appstore-fetcher-lastFailure); clear it so the install can retry now.
+    runOcc(['config:app:delete', 'settings', 'appstore-fetcher-lastFailure', '--no-ansi']);
+
+    [$code, $stdout, $stderr] = runOcc(['app:install', 'richdocuments', '--no-ansi']);
+    logMessage("app:install returned {$code}" . ($code !== 0 ? ' output: ' . preg_replace('/\s+/', ' ', trim($stdout . ' ' . $stderr)) : ''));
+
+    [$code, $stdout, $stderr] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
+    logMessage("app:enable returned {$code}" . ($code !== 0 ? ' output: ' . preg_replace('/\s+/', ' ', trim($stdout . ' ' . $stderr)) : ''));
 
     [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--callback-url=' . $callbackUrl, '--no-ansi']);
     logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
