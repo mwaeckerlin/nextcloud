@@ -1,4 +1,4 @@
-ARG VERSION="latest"
+ARG VERSION="noble"
 FROM mwaeckerlin/ubuntu-base:${VERSION} AS production
 
 EXPOSE 80
