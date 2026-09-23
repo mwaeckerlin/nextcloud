@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-09-23 **1.1.1**
+    - Version branches are created up to Nextcloud 35.
+
 - 2026-07-23 **1.1.0**
     - Office (Collabora) app installation is reliable on slow
       connections: the app-store fetch timeout is configurable
