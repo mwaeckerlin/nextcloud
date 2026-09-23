@@ -458,6 +458,25 @@ NEXTCLOUD_ADMIN_PASSWORD=$(pwgen -sy 40 1) \
 docker compose up
 ```
 
+## Tags and Branches
+
+Docker Hub builds every tag from a branch of this repository:
+
+| Tag | Branch | Content |
+|-----|--------|---------|
+| `nginx`, `php-fpm` | `new` | the current Nextcloud release |
+| `nginx-NN`, `php-fpm-NN` | `new-NN` | Nextcloud major version `NN` |
+| `latest` | `master` | legacy: single Apache image |
+| `NN` | `NN` | legacy: single Apache image with Nextcloud major version `NN` |
+
+An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-NN` and `php-fpm-NN` and steps through the versions. `create-branches.sh` creates the version branches in both lines; the Docker Hub build rules match them with `/^new-([0-9]+)$/` → `nginx-{\1}` / `php-fpm-{\1}` and `/^[0-9]+$/` → `{sourceref}`.
+
+### Legacy image
+
+`latest` and the numbered tags are the former single image: Apache, PHP and Nextcloud in one container, built from `master` on `mwaeckerlin/ubuntu-base`. It is still built so that existing installations keep receiving updates.
+
+Its Ubuntu release is pinned in `ARG VERSION` of the `master` `Dockerfile`: `jammy` for Nextcloud 30 and older, `noble` from 31. `mwaeckerlin/ubuntu-base:latest` is Ubuntu 26.04, and its `tar` fails on the Docker Hub build servers (kernel 5.4, Docker 20.10) with `Cannot mkdir: Function not implemented` while unpacking Nextcloud. The pin can go once the build servers run a newer kernel.
+
 ## Issues with Collabora Office Integration
 
 ### Target state
