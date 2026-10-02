@@ -1,0 +1,36 @@
+# Builds the images of this repository for amd64 and arm64 and publishes them
+# on Docker Hub, on every push to a live branch and once a week for the
+# security fixes of the base images. The build itself is the reusable workflow
+# docker-image.yml of mwaeckerlin/scratch; its README explains the setup.
+#
+# Nextcloud upgrades one major version at a time, so every major version has
+# its own branch and its own tags. The same file stands on every live branch:
+#   new      -> nginx, php-fpm                 (current release)
+#   new-NN   -> nginx-NN, php-fpm-NN           (major version NN)
+#   master   -> latest                         (legacy single image)
+#   NN       -> NN                             (legacy, major version NN)
+# The branches 13 to 29 are frozen: their tags stay as published.
+
+name: docker
+
+on:
+  push:
+    branches: [master, new, "new-*", "3[0-9]"]
+  schedule:
+    # weekly rebuild, one hour per level after the images it is built on:
+    # mwaeckerlin/nginx and mwaeckerlin/php-fpm at 05:17, this repository at level 3
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# one run per branch at a time; a branch never cancels the run of another
+concurrency: docker-${{ github.ref_name }}
+
+jobs:
+  docker:
+    uses: mwaeckerlin/scratch/.github/workflows/docker-image.yml@master
+    permissions:
+      actions: write
+      contents: read
+    with:
+      branch-tags: '[{"branch": "new-([0-9]+)", "suffix": "-\\1"}, {"branch": "new", "suffix": ""}, {"branch": "(3[0-9])", "suffix": "-\\1"}]'
+    secrets: inherit

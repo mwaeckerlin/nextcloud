@@ -204,6 +204,29 @@ fi
 grep -Eq "fileId=${FILE_ID}|\"fileid\":${FILE_ID}|\"fileid\":\"${FILE_ID}\"|initial-state-richdocuments" <<<"$EDITOR_HTML" \
   || fail "richdocuments editor page does not reference file ID ${FILE_ID}"
 
+# --- WebSocket app convention: /ws/<appid>/<path> -> <appid>-ws:3001/<path>
+# A stand-in backend named e2e-ws answers plain HTTP on port 3001 in the
+# network nginx shares with Collabora; nginx must strip /ws/e2e and pass the
+# rest of the path and the query string through.
+echo "[E2E] Checking the WebSocket app proxy /ws/<appid>/"
+WS_NET="${COMPOSE_PROJECT_NAME}_nginx-collabora"
+docker rm -f e2e-ws >/dev/null 2>&1 || true
+trap 'docker rm -f e2e-ws >/dev/null 2>&1 || true; cleanup' EXIT
+docker run -d --rm --name e2e-ws --network "$WS_NET" --network-alias e2e-ws \
+  python:3-alpine sh -c 'mkdir -p /srv/probe && echo ws-proxy-ok > /srv/probe/answer.txt && cd /srv && python -m http.server 3001' >/dev/null
+deadline=$(( $(date +%s) + 60 ))
+while :; do
+  WS_ANSWER=$(nc_curl "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/ws/e2e/probe/answer.txt?x=1" 2>/dev/null || true)
+  [[ "$WS_ANSWER" == "ws-proxy-ok" ]] && break
+  if (( $(date +%s) > deadline )); then
+    docker compose logs --tail=50 nextcloud-nginx >&2 || true
+    fail "/ws/e2e/probe/answer.txt did not reach e2e-ws:3001/probe/answer.txt (got '$WS_ANSWER')"
+  fi
+  sleep 2
+done
+docker rm -f e2e-ws >/dev/null 2>&1 || true
+
 echo "E2E succeeded: stack up, richdocuments active, WOPI URLs"
 echo "configured, Collabora discovery + capabilities ok, test document"
-echo "openable through richdocuments with a WOPI token."
+echo "openable through richdocuments with a WOPI token, WebSocket app"
+echo "proxy /ws/<appid>/ reaches <appid>-ws:3001."

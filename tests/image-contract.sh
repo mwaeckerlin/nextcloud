@@ -43,6 +43,26 @@ _no_interpreter() {
     fi
 }
 
+# A version branch new-NN sets `ARG SOURCE_FILE="latest-NN.tar.bz2"`; its image
+# must then carry Nextcloud NN, because an installation upgrades one major
+# version at a time and pulls the tag of exactly the version it steps to. The
+# branch new downloads `latest.tar.bz2` and accepts any version. Only the
+# php-fpm image carries the real version.php; the nginx image has stubs.
+_nextcloud_major() {
+    local image="$1" expected
+    expected=$(sed -nE 's/^ARG SOURCE_FILE="latest-([0-9]+)\.tar\.bz2"$/\1/p' php-fpm/Dockerfile)
+    local major
+    major=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" \
+        -r 'include "/app/version.php"; echo $OC_Version[0];' 2> /dev/null)
+    if [[ -z "${major}" ]]; then
+        _fail "${image}_nextcloud_version" "no /app/version.php readable"
+    elif [[ -n "${expected}" && "${major}" != "${expected}" ]]; then
+        _fail "${image}_nextcloud_version" "Nextcloud ${major}, branch expects ${expected}"
+    else
+        _pass "${image}_nextcloud_version (${major})"
+    fi
+}
+
 echo "==> Image contract: headless images"
 
 for image in "$@"; do
@@ -51,6 +71,19 @@ for image in "$@"; do
     _no_interpreter "${image}" /bin/bash    bash    -c :
     _no_interpreter "${image}" /bin/busybox busybox ls /
     _no_interpreter "${image}" /usr/bin/perl perl   -e 1
+    if [[ "${image}" == *:php-fpm* ]]; then
+        _nextcloud_major "${image}"
+        # Every PHP process holds one database connection while it answers,
+        # so the pool must stay below max_connections of the database (151
+        # by default); the bound comes from the base image mwaeckerlin/php-fpm.
+        local_pool=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" \
+            -r 'foreach (glob("/etc/php*/php-fpm.d/www.conf") as $f) echo file_get_contents($f);' 2> /dev/null)
+        if grep -qE '^pm\.max_children *= *50$' <<< "${local_pool}"; then
+            _pass "${image}_php_fpm_max_children (50)"
+        else
+            _fail "${image}_php_fpm_max_children" "pm.max_children is not 50 in /etc/php*/php-fpm.d/www.conf: '$(grep -E '^pm\.max_children' <<< "${local_pool}")'"
+        fi
+    fi
 done
 
 echo ""

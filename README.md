@@ -32,7 +32,7 @@ Compared to the official [nextcloud] image, this package has:
 
 ## Volumes / Persistence
 
-All mutable Nextcloud data lives in three directories:
+All mutable Nextcloud data lives in these directories:
 
 | Mount in container | Docker volume | Content                    |
 |--------------------|---------------|----------------------------|
@@ -40,18 +40,23 @@ All mutable Nextcloud data lives in three directories:
 | `/app/config`      | `nc-config`   | `config.php` and fragments |
 | `/app/custom_apps` | `nc-apps`     | User-installed apps        |
 
-**Permissions** on the volumes: the runtime user comes from the base images and is not root. The helper service `access-fix` (based on `mwaeckerlin/allow-write-access`) runs once at startup to set the correct ownership; after that the volumes keep their owner.
+### Permissions
 
-**First-run initialization**: on first start, Docker initializes the `nc-config` volume from the image content of `/app/config`. This seeds two PHP config files:
+The runtime user comes from the base images and is not root. The helper service `access-fix` (based on `mwaeckerlin/allow-write-access`) runs once at startup to set the correct ownership of the volumes; after that the volumes keep their owner.
+
+### First-run initialization
+
+On first start, Docker initializes the `nc-config` volume from the image content of `/app/config`. This seeds these PHP config files:
+
 - `autoconfig.php`: consumed by Nextcloud on the first web request to perform a fully headless installation (reads DB credentials from Docker secrets, admin credentials from the secret or auto-generates them).
 - `custom.config.php`: a persistent config fragment always loaded alongside `config.php`; reads `HOST`, `PROTOCOL`, `WEBROOT`, `DEBUG` from environment variables at every request.
 
 
 ## Secrets
 
-Passwords are delivered as Docker secrets — never as plain environment variables. They are mounted read-only as tmpfs files at `/run/secrets/` and never appear in `docker inspect` or process listings.
+Passwords are delivered as Docker secrets — never as plain environment variables. They are mounted read-only as tmpfs files at `/run/secrets/` and never appear in `docker inspect` or process listings.
 
-Two secrets are required:
+The stack needs these secrets:
 
 | Secret name              | Used by                               | Purpose                        |
 |--------------------------|---------------------------------------|--------------------------------|
@@ -77,7 +82,7 @@ If `nextcloud_admin_password` is absent or empty, a random password is generated
 docker compose logs nextcloud-php-fpm | grep 'generated admin password'
 ```
 
-#### Production: Docker Swarm secrets
+#### Docker Swarm secrets
 
 For multi-node or high-security deployments, use Docker Swarm secrets instead. Change the `secrets:` block in `docker-compose.yml` to:
 
@@ -127,6 +132,25 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
 - **collabora**
   - `COLLABORA_SERVER_NAME`: browser-visible host name for the office frontend; defaults to `HOST`.
   - `aliasgroup1`: allowlist of accepted WOPI origins. In this setup it must include both the internal Nextcloud URL and, if needed, the browser-facing local URL.
+
+### Database connections
+
+Every PHP process holds one database connection while it answers a request and closes it when the request ends. The pool configuration of the base image `mwaeckerlin/php-fpm`, `/etc/php<version>/php-fpm.d/www.conf`, starts at most `pm.max_children = 50` processes, so Nextcloud never opens more than 50 connections for requests, plus one for each running background job. The database accepts `max_connections` connections, 151 by default in MariaDB and MySQL.
+
+The two limits work together:
+
+- Requests above `pm.max_children` wait in the queue of `php-fpm` until a process is free; NGINX answers with 504 only after 60 seconds.
+- Connections above `max_connections` fail at once, and Nextcloud shows «Too many connections» (error 1040).
+
+So `max_connections` must stay above `pm.max_children` with room for background jobs, backups and administration. Nextcloud gets no root password and never changes the limit of the database. Where the database also serves other clients, its limit is raised as an option of its own server:
+
+```yaml
+  nextcloud-db:
+    image: mariadb
+    command: --max-connections=500
+```
+
+Every open connection takes memory in the database server, so a higher limit needs the memory for it where the database runs with a memory limit.
 
 
 ## Docker Compose Setup
@@ -345,32 +369,17 @@ In the best setup, four distinct networks are used, each encrypted and locked do
 
 ## WebSocket Apps (Realtime Backends)
 
-Some Nextcloud apps ship a realtime backend that needs WebSocket support
-(e.g. push notifications, collaborative editing, live dashboards). PHP-FPM
-cannot serve WebSockets, so the upgrade must happen at NGINX.
+Some Nextcloud apps ship a realtime backend that needs WebSocket support (e.g. push notifications, collaborative editing, live dashboards). PHP-FPM cannot serve WebSockets, so the upgrade must happen at NGINX.
 
-`mwaeckerlin/nextcloud:nginx` ships with a generic, same-origin
-WebSocket reverse proxy convention so that apps installed from the
-Nextcloud app store (or via `docker compose`) work **out of the box,
-without editing any NGINX configuration**:
+`mwaeckerlin/nextcloud:nginx` ships with a generic, same-origin WebSocket reverse proxy convention so that apps installed from the Nextcloud app store (or via `docker compose`) work **out of the box, without editing any NGINX configuration**:
 
-1. **Service naming**: the app's WebSocket backend runs as a
-   `docker-compose` service named **`<appid>-ws`** on internal port
-   **`3001`**.
-2. **Network**: the service is attached to the same Docker network as
-   `nextcloud-nginx` (Docker's embedded DNS at `127.0.0.11` resolves the
-   name at request time).
-3. **Public URL**: clients connect to
-   **`ws(s)://<host>[<WEBROOT>]/ws/<appid>/<path>`**.
+1. **Service naming**: the app's WebSocket backend runs as a `docker-compose` service named **`<appid>-ws`** on internal port **`3001`**.
+2. **Network**: the service is attached to the same Docker network as `nextcloud-nginx` (Docker's embedded DNS at `127.0.0.11` resolves the name at request time).
+3. **Public URL**: clients connect to **`ws(s)://<host>[<WEBROOT>]/ws/<appid>/<path>`**.
 
-NGINX strips `/ws/<appid>` and proxies `<path>` (and the query string)
-through to `http://<appid>-ws:3001/<path>` with the standard
-`Upgrade`/`Connection` headers and a 10-hour idle timeout. Because the
-WebSocket is served from the same origin as Nextcloud itself, the
-default `Content-Security-Policy: connect-src 'self'` allows it
-automatically — no CSP overrides needed.
+NGINX strips `/ws/<appid>` and proxies `<path>` (and the query string) through to `http://<appid>-ws:3001/<path>` with the standard `Upgrade`/`Connection` headers and a 10-hour idle timeout. Because the WebSocket is served from the same origin as Nextcloud itself, the default `Content-Security-Policy: connect-src 'self'` allows it automatically — no CSP overrides needed.
 
-### Example: an app `parlwin` with a realtime backend
+### Realtime backend example
 
 `docker-compose.yml` fragment shipped by the app:
 
@@ -390,18 +399,11 @@ That's all the admin has to do. Frontend code uses:
 const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/parlwin/`;
 ```
 
-Backend service-to-service calls (e.g. publishing events from PHP-FPM
-to the WS broker) still use the internal hostname directly
-(`http://parlwin-ws:3001/publish`), bypassing nginx.
+Backend service-to-service calls (e.g. publishing events from PHP-FPM to the WS broker) still use the internal hostname directly (`http://parlwin-ws:3001/publish`), bypassing nginx.
 
 ### Third-party apps with fixed paths
 
-Apps that hard-code a different path (e.g. Nextcloud's official
-`notify_push` uses `/push`, Talk's HPB uses `/standalone-signaling/`)
-can drop their own `.conf` snippet into `/etc/nginx/locations.d/`
-inside the `nextcloud-nginx` image (volume mount or derived image).
-The `$connection_upgrade` map is available globally, so snippets can
-simply use:
+Apps that hard-code a different path (e.g. Nextcloud's official `notify_push` uses `/push`, Talk's HPB uses `/standalone-signaling/`) can drop their own `.conf` snippet into `/etc/nginx/locations.d/` inside the `nextcloud-nginx` image (volume mount or derived image). The `$connection_upgrade` map is available globally, so snippets can simply use:
 
 ```nginx
 location ^~ /push {
@@ -440,7 +442,7 @@ secrets:
     file: ./dev-secrets/nextcloud_admin_password
 ```
 
-Or (since Docker Compose 2.24) read directly from environment variables — no file, no Swarm needed:
+Or (since Docker Compose 2.24) read directly from environment variables — no file, no Swarm needed:
 
 ```yaml
 secrets:
@@ -460,7 +462,7 @@ docker compose up
 
 ## Tags and Branches
 
-Docker Hub builds every tag from a branch of this repository:
+Every tag is built from a branch of this repository:
 
 | Tag | Branch | Content |
 |-----|--------|---------|
@@ -469,13 +471,17 @@ Docker Hub builds every tag from a branch of this repository:
 | `latest` | `master` | legacy: single Apache image |
 | `NN` | `NN` | legacy: single Apache image with Nextcloud major version `NN` |
 
-An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-NN` and `php-fpm-NN` and steps through the versions. `create-branches.sh` creates the version branches in both lines; the Docker Hub build rules match them with `/^new-([0-9]+)$/` → `nginx-{\1}` / `php-fpm-{\1}` and `/^[0-9]+$/` → `{sourceref}`.
+Each of these tags is also published with the day of the build and, where the branch carries a version in `package.json`, with that version: branch `new-33` publishes `nginx-33`, `nginx-33-20261002`, `nginx-33-1.1.2` and `nginx-33-1.1.2-20261002`. A rebuild of the same version therefore stays addressable by its date.
+
+An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-NN` and `php-fpm-NN` and steps through the versions. The test of every version branch checks that its `php-fpm` image carries exactly Nextcloud `NN`.
+
+The GitHub workflow `.github/workflows/docker.yml` builds, tests and publishes the images for amd64 and arm64, on every push to a live branch and every Monday at 06:17 UTC, one hour after the rebuild of `mwaeckerlin/nginx` and `mwaeckerlin/php-fpm`. It calls the shared workflow of [mwaeckerlin/scratch](https://github.com/mwaeckerlin/scratch#publishing-on-docker-hub), which also describes the secret `DOCKERHUB_TOKEN` it needs. The same file stands on every live branch: `new`, `new-30` to `new-35`, `master` and `30` to `35`. The branches `13` to `29` are frozen, their tags stay as published. `create-branches.sh` creates the version branches of each line from its base branch.
 
 ### Legacy image
 
 `latest` and the numbered tags are the former single image: Apache, PHP and Nextcloud in one container, built from `master` on `mwaeckerlin/ubuntu-base`. It is still built so that existing installations keep receiving updates.
 
-Its Ubuntu release is pinned in `ARG VERSION` of the `master` `Dockerfile`: `jammy` for Nextcloud 30 and older, `noble` from 31. `mwaeckerlin/ubuntu-base:latest` is Ubuntu 26.04, and its `tar` fails on the Docker Hub build servers (kernel 5.4, Docker 20.10) with `Cannot mkdir: Function not implemented` while unpacking Nextcloud. The pin can go once the build servers run a newer kernel.
+Its Ubuntu release is pinned in `ARG VERSION` of the `master` `Dockerfile`: `jammy` for Nextcloud 30 and older, `noble` from 31. `mwaeckerlin/ubuntu-base:latest` is Ubuntu 26.04, and its `tar` failed on the former Docker Hub build servers (kernel 5.4, Docker 20.10) with `Cannot mkdir: Function not implemented` while unpacking Nextcloud. `noble` and `jammy` exist for amd64 only, so the legacy image is built for amd64 only. Its `README.md` on `master` describes its variables, among them `MAX_REQUEST_WORKERS`, which bounds the Apache workers and with them the database connections.
 
 ## Issues with Collabora Office Integration
 
@@ -499,10 +505,9 @@ For this Compose topology, the following mapping has proven reliable:
 
 Important: from inside the Collabora container, `localhost` means the container itself, not the Docker host and not the Nextcloud NGINX service.
 
-### Why loops can still happen
+### Remaining loops
 
-Even with correct WOPI URLs, some absolute links in Richdocuments (for example preset/template settings) can still depend on the incoming request host.
-If `localhost:8824` appears in server-side responses, Collabora will try to fetch those URLs internally and produce errors such as:
+Even with correct WOPI URLs, some absolute links in Richdocuments (for example preset/template settings) can still depend on the incoming request host. If `localhost:8824` appears in server-side responses, Collabora will try to fetch those URLs internally and produce errors such as:
 
 - `Failed to fetch preset uri[http://localhost:8824/... ]`
 - `ECONNREFUSED`
@@ -523,16 +528,14 @@ This keeps browser links correct while letting Collabora reliably reach internal
 
 The integration remains reproducible with fresh volumes if the following points are in place:
 
-1. The Dockerfile includes office defaults (`OFFICE_WOPI_URL`, `OFFICE_PUBLIC_WOPI_URL`, `OFFICE_CALLBACK_URL`) and the bootstrap entrypoint.
-  Public and callback URLs are intentionally empty by default and auto-generated from `HOST`, `PROTOCOL` and `WEBROOT`.
+1. The Dockerfile includes office defaults (`OFFICE_WOPI_URL`, `OFFICE_PUBLIC_WOPI_URL`, `OFFICE_CALLBACK_URL`) and the bootstrap entrypoint. Public and callback URLs are intentionally empty by default and auto-generated from `HOST`, `PROTOCOL` and `WEBROOT`.
 2. `office-bootstrap.php` installs/enables `richdocuments` and sets required app values via `occ`.
 3. `custom.config.php` is always loaded (either from the image or as a bind mount, as in this Compose file).
 4. With an empty `config` volume, `autoconfig.php` is provided automatically and first-time setup runs headless.
 
 This ensures behavior is not dependent on old volume state.
 
-For local Docker Compose, the callback must stay internal even when the browser host is `localhost:8824`.
-Otherwise Collabora sends WOPI requests back to itself and answers with `Unauthorized WOPI host`.
+For local Docker Compose, the callback must stay internal even when the browser host is `localhost:8824`. Otherwise Collabora sends WOPI requests back to itself and answers with `Unauthorized WOPI host`.
 
 ### Common pitfalls
 
