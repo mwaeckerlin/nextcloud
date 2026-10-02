@@ -11,6 +11,7 @@ ENV ADMIN_PWD ""
 ENV HOST ""
 ENV PROTOCOL "https"
 ENV DEBUG "0"
+ENV MAX_REQUEST_WORKERS "100"
 
 # compile time variables
 ENV CONTAINERNAME "nextcloud"
@@ -60,6 +61,7 @@ RUN apt-get update \
       && ln -sf /proc/1/fd/1 /var/log/apache2/access.log \
       && ln -sf /proc/1/fd/2 /var/log/apache2/error.log \
       && ln -sf /proc/1/fd/1 /var/log/nextcloud.log
+ADD mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
 
 VOLUME $DATADIR
 VOLUME $CONFDIR

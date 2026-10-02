@@ -1,0 +1,4 @@
+services:
+  nextcloud:
+    build: .
+    image: mwaeckerlin/nextcloud:latest

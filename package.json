@@ -1,0 +1,11 @@
+{
+  "name": "@mwaeckerlin/nextcloud",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "docker compose build",
+    "deploy": "docker compose push nextcloud",
+    "test:contract": "bash tests/image-contract.sh mwaeckerlin/nextcloud:latest",
+    "test": "npm run build && npm run test:contract"
+  }
+}

@@ -117,11 +117,6 @@ echo "----  broken apps repaired"
 sudo -u www-data php --define apc.enable_cli=1 ./occ maintenance:mode --off
 
 echo "**** reset configuration"
-if test -n "${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; then
-    # allow more database connections
-    echo "----  set maximal mysql connections"
-    mysql -h mysql -u root -p${MYSQL_ENV_MYSQL_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} <<<"set global max_connections = 2000;"
-fi
 # add debugging if required
 if test "$DEBUG" -eq 1; then
     echo "----  enable debug"
