@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-03 **1.1.3**
+    - The images `nginx-30` to `nginx-32` and `php-fpm-30` to `php-fpm-32` are no longer rebuilt: Nextcloud 30 to 32 refuse PHP 8.5, the only PHP of the base image, so these tags never installed. Their published tags stay; the legacy tags `30` to `35` remain the upgrade path for Nextcloud 30 to 32.
+
 - 2026-10-02 **1.1.2**
     - Every image is also published with the day of its build and with the version, so a rebuild stays addressable, e.g. `nginx-33-1.1.2-20261002`.
     - Images are built and published for amd64 and arm64, on every change and every Monday for the security fixes of the base images.

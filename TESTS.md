@@ -1,6 +1,6 @@
 # Tests
 
-Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test covers. `npm test` runs the image contract and then the end-to-end suite; no test is skipped.
+Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test covers. `npm test` runs the branch contract, the image contract and then the end-to-end suite; no test is skipped.
 
 ## End-to-end
 
@@ -17,6 +17,12 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 - **F1** no sh, no bash, no busybox, no perl in either image.
 - **F5** the `php-fpm` image carries the Nextcloud major version the branch names in `ARG SOURCE_FILE`.
 - **F7** the `php-fpm` image limits its pool to `pm.max_children = 50` in `/etc/php<version>/php-fpm.d/www.conf`.
+
+## Branch contract
+
+`tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does.
+
+- **F5** `new`, `new-33` to `new-35` and `30` to `35` are built with their suffix; `new-30` to `new-32` and `13` to `29` match no rule and stay frozen.
 
 ## Workflow contract
 

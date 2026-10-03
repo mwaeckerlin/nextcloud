@@ -2,7 +2,9 @@
 set -euo pipefail
 
 BASE_BRANCH="${BASE_BRANCH:-new}"
-START_VERSION="${START_VERSION:-30}"
+# Nextcloud 30 to 32 refuse the PHP 8.5 of mwaeckerlin/php-fpm, so their
+# branches new-30 to new-32 stay frozen and are not rebuilt from here
+START_VERSION="${START_VERSION:-33}"
 END_VERSION="${END_VERSION:-35}"
 
 if [[ "$#" -gt 0 ]]; then

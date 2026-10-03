@@ -475,7 +475,9 @@ Each of these tags is also published with the day of the build and, where the br
 
 An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-NN` and `php-fpm-NN` and steps through the versions. The test of every version branch checks that its `php-fpm` image carries exactly Nextcloud `NN`.
 
-The GitHub workflow `.github/workflows/docker.yml` builds, tests and publishes the images for amd64 and arm64, on every push to a live branch and every Monday at 06:17 UTC, one hour after the rebuild of `mwaeckerlin/nginx` and `mwaeckerlin/php-fpm`. It calls the shared workflow of [mwaeckerlin/scratch](https://github.com/mwaeckerlin/scratch#publishing-on-docker-hub), which also describes the secret `DOCKERHUB_TOKEN` it needs. The same file stands on every live branch: `new`, `new-30` to `new-35`, `master` and `30` to `35`. The branches `13` to `29` are frozen, their tags stay as published. `create-branches.sh` creates the version branches of each line from its base branch.
+The GitHub workflow `.github/workflows/docker.yml` builds, tests and publishes the images for amd64 and arm64, on every push to a live branch and every Monday at 06:17 UTC, one hour after the rebuild of `mwaeckerlin/nginx` and `mwaeckerlin/php-fpm`. It calls the shared workflow of [mwaeckerlin/scratch](https://github.com/mwaeckerlin/scratch#publishing-on-docker-hub), which also describes the secret `DOCKERHUB_TOKEN` it needs. The same file stands on every live branch: `new`, `new-33` to `new-35`, `master` and `30` to `35`. `create-branches.sh` creates the version branches of each line from its base branch.
+
+The branches `13` to `29` and `new-30` to `new-32` are frozen: nothing builds them any more, and their tags stay as published. Nextcloud 30 to 32 refuse PHP 8.5, and `mwaeckerlin/php-fpm` carries only the current PHP of Alpine, so `nginx-30` to `nginx-32` and `php-fpm-30` to `php-fpm-32` cannot install Nextcloud. An installation of the legacy image on Nextcloud 30 to 32 upgrades over the legacy tags `30` to `35`, which run on the PHP of Ubuntu `noble` and `jammy`.
 
 ### Legacy image
 
