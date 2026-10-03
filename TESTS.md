@@ -1,6 +1,12 @@
 # Tests
 
-Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test covers. `npm test` builds the image and runs the image contract; no test is skipped.
+Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test covers. `npm test` runs the branch contract, builds the image and runs the image contract; no test is skipped.
+
+## Branch contract
+
+`tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does; the weekly run of `master` starts the workflow on every branch a rule matches.
+
+- **F2** `30` to `35`, `new` and `new-33` to `new-35` are built with their suffix; `13` to `29` and `new-30` to `new-32` match no rule and stay frozen.
 
 ## Image contract
 

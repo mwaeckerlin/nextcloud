@@ -6,10 +6,12 @@
 # Nextcloud upgrades one major version at a time, so every major version has
 # its own branch and its own tags. The same file stands on every live branch:
 #   new      -> nginx, php-fpm                 (current release)
-#   new-NN   -> nginx-NN, php-fpm-NN           (major version NN)
+#   new-NN   -> nginx-NN, php-fpm-NN           (major version NN, from 33)
 #   master   -> latest                         (legacy single image)
 #   NN       -> NN                             (legacy, major version NN)
-# The branches 13 to 29 are frozen: their tags stay as published.
+# The branches 13 to 29 and new-30 to new-32 are frozen: their tags stay as
+# published. Nextcloud 30 to 32 refuse PHP 8.5, the only PHP of
+# mwaeckerlin/php-fpm; installations on them upgrade over the legacy tags.
 
 name: docker
 
@@ -35,5 +37,5 @@ jobs:
       # the legacy line builds on mwaeckerlin/ubuntu-base:noble and :jammy,
       # which exist for amd64 only
       architectures: '["amd64"]'
-      branch-tags: '[{"branch": "new-([0-9]+)", "suffix": "-\\1"}, {"branch": "new", "suffix": ""}, {"branch": "(3[0-9])", "suffix": "-\\1"}]'
+      branch-tags: '[{"branch": "new-(3[3-9])", "suffix": "-\\1"}, {"branch": "new", "suffix": ""}, {"branch": "(3[0-9])", "suffix": "-\\1"}]'
     secrets: inherit
