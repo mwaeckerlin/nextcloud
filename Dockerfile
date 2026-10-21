@@ -62,6 +62,11 @@ RUN apt-get update \
       && ln -sf /proc/1/fd/2 /var/log/apache2/error.log \
       && ln -sf /proc/1/fd/1 /var/log/nextcloud.log
 ADD mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
+# session upload progress off for the PHP Apache runs: the mitigation the
+# advisory of CVE-2026-109619 names; start.sh writes 99-nextcloud.ini at
+# every start, so this setting stands in a file of its own
+RUN echo "session.upload_progress.enabled = Off" > "$(ls -d /etc/php/*/apache2/conf.d | head -n 1)/98-upload-progress.ini"
+
 
 VOLUME $DATADIR
 VOLUME $CONFDIR
