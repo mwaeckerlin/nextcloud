@@ -10,7 +10,6 @@ RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN mkdir -p data
 USER root
 RUN ${ALLOW_USER} data
-RUN ${PKG_INSTALL} php
 
 FROM mwaeckerlin/php-fpm AS production
 ENV ADMIN_USER "admin"
@@ -28,7 +27,6 @@ ENV OFFICE_PUBLIC_WOPI_URL ""
 ENV OFFICE_CALLBACK_URL ""
 ENV OFFICE_WOPI_ALLOWLIST ""
 COPY --from=build /app /app
-COPY --from=build /usr/bin/php /usr/bin/php
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php
