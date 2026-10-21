@@ -9,6 +9,9 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 - **F2** waits until `occ status` reports `installed: true`.
 - **F3** waits until `richdocuments` is enabled and its WOPI URLs are set, checks `/hosting/discovery` and `/hosting/capabilities` of Collabora, uploads a document over WebDAV and opens it in the office editor.
 - **F4** starts a stand-in backend `e2e-ws` on port 3001 and fetches `/ws/e2e/probe/answer.txt` through nginx.
+- **F8** waits until Docker reports `nextcloud-php-fpm` as `healthy`, which the stack itself needs, since `nextcloud-nginx` starts only then; switches on maintenance mode, checks that `health.php` reports unhealthy and names the mode, and healthy again once the mode ends.
+- **F9** starts the stack with `UPLOAD_MAX_FILESIZE=20G`, `MAX_INPUT_TIME=7200` and `MEMORY_LIMIT=1500M`, requests `tests/e2e/ini-probe.php` over FastCGI from a php-fpm worker and checks `upload_max_filesize`, `post_max_size`, `memory_limit`, `max_input_time` and `max_execution_time`; checks `fastcgi_read_timeout 7200s` in `nginx -T`; checks that `URL` alone sets `overwritehost` and that `HOST` takes precedence over `URL`.
+- **F10** checks that background jobs run in cron mode and `lastcron` is set; switches on maintenance mode, restarts `nextcloud-php-fpm`, waits until it is healthy again and checks that the start logged the upgrade and repair.
 
 ## Image contract
 
@@ -16,7 +19,9 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 
 - **F1** no sh, no bash, no busybox, no perl in either image.
 - **F5** the `php-fpm` image carries the Nextcloud major version the branch names in `ARG SOURCE_FILE`.
-- **F7** the `php-fpm` image limits its pool to `pm.max_children = 50` in `/etc/php<version>/php-fpm.d/www.conf`.
+- **F7** `php-fpm -tt` in the `php-fpm` image loads `pm.max_children = 100` by default and `7` with `MAX_REQUEST_WORKERS=7`.
+- **F8** the `php-fpm` image carries a `HEALTHCHECK` that runs `/usr/bin/php /usr/local/bin/health.php` with a start period of 300 seconds and 240 retries, and the check reports unhealthy in a container where php-fpm does not run.
+- **F9** `/var/www/nextcloud/data` and `/var/www/nextcloud/config`, the paths of the legacy image, resolve to `/app/data` and `/app/config`; the `php-fpm` image sets the variables of the legacy image with its defaults; with an unreachable database and `WAIT_SECONDS_FOR_MYSQL=5` the installation gives up within 90 seconds and logs the window of 5 seconds.
 
 ## Branch contract
 

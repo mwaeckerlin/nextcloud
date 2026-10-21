@@ -40,6 +40,12 @@ function resolvePublicHost(): string
         return $host;
     }
 
+    // URL is the same setting as HOST, as in the legacy image
+    $url = trim((string) (getenv('URL') ?: ''));
+    if ($url !== '') {
+        return $url;
+    }
+
     // Backward-compatible alias for older compose setups.
     $domain = trim((string) (getenv('DOMAIN') ?: ''));
     if ($domain !== '') {

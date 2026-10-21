@@ -7,11 +7,12 @@ services:
       - "8824:8080"
     environment:
       WEBROOT: ${WEBROOT}
+      MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
     volumes:
       - apps:/app/custom_apps:ro
     depends_on:
       nextcloud-php-fpm:
-        condition: service_started
+        condition: service_healthy
     networks:
       - nxinx-php
       - nginx-collabora
@@ -24,6 +25,9 @@ services:
       HOST: ${HOST:-localhost:8824}
       PROTOCOL: ${PROTOCOL:-http}
       WEBROOT: ${WEBROOT}
+      UPLOAD_MAX_FILESIZE: ${UPLOAD_MAX_FILESIZE:-8G}
+      MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
+      MEMORY_LIMIT: ${MEMORY_LIMIT:-1000M}
       MYSQL_HOST: nextcloud-db
     secrets:
       - nextcloud_db_password
