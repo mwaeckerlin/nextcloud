@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-21 **1.1.5**
+    - The WebSocket example of the documentation names a neutral app `myapp`
+
 - 2026-10-21 **1.1.4**
     - The PHP CLI that installs and upgrades Nextcloud comes from `mwaeckerlin/php-fpm` 1.2.6, which builds on the official PHP image; the image no longer copies the CLI of the Alpine PHP packages, which found no modules on the new base
 
