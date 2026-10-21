@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-21 **1.0.2**
+    - PHP runs with session upload progress off, locked against `.htaccess`: the mitigation the advisory of CVE-2026-109619 names for Apache `mod_php`, where both PHP vulnerabilities of 21 October allow remote code execution; the complete fix is the PHP update of Ubuntu
+
 - 2026-10-03 **1.0.1**
     - The weekly rebuild no longer starts the branches of the images `nginx-30` to `nginx-32` and `php-fpm-30` to `php-fpm-32`, which cannot install Nextcloud 30 to 32 on PHP 8.5; the legacy tags `30` to `35` stay the upgrade path for these versions.
 
