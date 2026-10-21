@@ -1,5 +1,13 @@
 # Changelog
 
+- 2026-10-22 **1.1.7**
+    - The image `nginx` leaves out the source maps of the JavaScript bundles and the sample files of new users, which no browser requests: about 300M less.
+    - The image `php-fpm` leaves out the source maps and keeps JavaScript and CSS as empty files. The build signs the release again with a CA of its own beside the Nextcloud CA, so the integrity check stays active and passes.
+    - The mail server, the phone region, the maintenance window and the log level saved under Administration settings, or by the legacy image, take effect again; the image sets `smtp-relay:25` and its other defaults only where nothing is saved. An external mail server with login is also set by `MAIL_SMTPHOST`, `MAIL_SMTPPORT`, `MAIL_SMTPSECURE`, `MAIL_SMTPNAME` and the secret `nextcloud_smtp_password`, which take precedence.
+    - The tests open a document in Collabora in a real browser, edit and save it.
+    - The development `docker-compose.yml` takes its host port from `NEXTCLOUD_HTTP_PORT` (default `8824`), for nginx and Collabora alike.
+    - The unused files `php-fpm/99-nextcloud.ini` and `php-fpm/fpm.conf` are gone; the variables set the PHP limits, and further PHP settings go into a mounted `.ini` file.
+
 - 2026-10-21 **1.1.6**
     - The images `nginx` and `php-fpm` take the variables of the legacy image again, with the same names and defaults: `UPLOAD_MAX_FILESIZE` (8G), `MEMORY_LIMIT` (1000M), `MAX_INPUT_TIME` (3600, also the timeout of `nginx`), `MAX_REQUEST_WORKERS` (100), `WAIT_SECONDS_FOR_MYSQL` (300), `URL` beside `HOST`, and `MYSQL_ENV_MYSQL_*`. `HOST` is empty by default, so `URL` takes effect.
     - The image `php-fpm` reports its health to Docker without any configuration, as the legacy image does: healthy once it answers requests, Nextcloud is installed, not in maintenance mode and needs no database upgrade. `nginx` starts only once `php-fpm` is healthy.

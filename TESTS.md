@@ -7,17 +7,20 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 `tests/e2e/run-compose-e2e.sh` builds and starts the whole compose stack, with Collabora and MariaDB, and tears it down afterwards.
 
 - **F2** waits until `occ status` reports `installed: true`.
-- **F3** waits until `richdocuments` is enabled and its WOPI URLs are set, checks `/hosting/discovery` and `/hosting/capabilities` of Collabora, uploads a document over WebDAV and opens it in the office editor.
+- **F3** waits until `richdocuments` is enabled and its WOPI URLs are set, checks `/hosting/discovery` and `/hosting/capabilities` of Collabora, uploads a document over WebDAV and opens it in the office editor. A Chromium of the Playwright image (`tests/e2e/office/`), in the network of the host, logs in under the address a user types, opens the document with `/f/<id>`, waits until Collabora shows it, types a text, saves with Ctrl+S, and finds that text in `content.xml` of the document WebDAV delivers.
 - **F4** starts a stand-in backend `e2e-ws` on port 3001 and fetches `/ws/e2e/probe/answer.txt` through nginx.
 - **F8** waits until Docker reports `nextcloud-php-fpm` as `healthy`, which the stack itself needs, since `nextcloud-nginx` starts only then; switches on maintenance mode, checks that `health.php` reports unhealthy and names the mode, and healthy again once the mode ends.
 - **F9** starts the stack with `UPLOAD_MAX_FILESIZE=20G`, `MAX_INPUT_TIME=7200` and `MEMORY_LIMIT=1500M`, requests `tests/e2e/ini-probe.php` over FastCGI from a php-fpm worker and checks `upload_max_filesize`, `post_max_size`, `memory_limit`, `max_input_time` and `max_execution_time`; checks `fastcgi_read_timeout 7200s` in `nginx -T`; checks that `URL` alone sets `overwritehost` and that `HOST` takes precedence over `URL`.
+- **F11** `occ integrity:check-core` and `occ integrity:check-app --all` pass with `richdocuments` from the App Store installed; a copy of the app `files` with a changed `appinfo/info.xml` fails `occ integrity:check-app` with `INVALID_HASH`.
+- **F12** reads `mail_smtphost` with `occ config:system:get`: `smtp-relay` after the installation, `mail.example.test` after `occ config:system:set`, and `env.example.test` with `NC_mail_smtphost=env.example.test`. Against `mailpit` of `tests/e2e/docker-compose.mail.yml`, which accepts only one login: a mail sent through Nextcloud with `MAIL_SMTPHOST`, `MAIL_SMTPPORT`, `MAIL_SMTPNAME` and `MAIL_SMTPPASSWORD` arrives, one with a wrong password does not; the endpoints of the form under Administration settings save mailpit with login, and «Send email» delivers the test mail there.
 - **F10** checks that background jobs run in cron mode and `lastcron` is set; switches on maintenance mode, restarts `nextcloud-php-fpm`, waits until it is healthy again and checks that the start logged the upgrade and repair.
 
 ## Image contract
 
 `tests/image-contract.sh`, run by `npm run test:contract` against the built images.
 
-- **F1** no sh, no bash, no busybox, no perl in either image.
+- **F1** no sh, no bash, no busybox, no perl in either image; the `nginx` image holds no `*.map` file and no `app/core/skeleton`, and keeps `app/dist/core-common.js`, `app/core/l10n/de.js` and `app/core/l10n/de.json`; the `php-fpm` image holds no `*.map` file and an empty `app/dist/core-common.js`.
+- **F11** `resources/codesigning/root.crt` of the `php-fpm` image holds one certificate more than the release and starts with the unchanged certificates of the release, as the `nginx` image carries them.
 - **F5** the `php-fpm` image carries the Nextcloud major version the branch names in `ARG SOURCE_FILE`.
 - **F7** `php-fpm -tt` in the `php-fpm` image loads `pm.max_children = 100` by default and `7` with `MAX_REQUEST_WORKERS=7`.
 - **F8** the `php-fpm` image carries a `HEALTHCHECK` that runs `/usr/bin/php /usr/local/bin/health.php` with a start period of 300 seconds and 240 retries, and the check reports unhealthy in a container where php-fpm does not run.

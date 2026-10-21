@@ -7,12 +7,25 @@ ADD --chmod=644 nextcloud.asc /tmp/nextcloud.asc
 RUN gpg --dearmor < /tmp/nextcloud.asc > /tmp/nextcloud.gpg
 RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
+# browser files: nginx delivers its own copy, php-fpm only checks that they
+# exist; sign-release.php signs the release again afterwards
+RUN find . -name '*.map' -delete
+RUN find . -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.css' \) -exec sh -c ': > "$1"' _ {} \;
 RUN mkdir -p data
 USER root
 RUN ${ALLOW_USER} data
 # the paths of the legacy image: its config.php names /var/www/nextcloud/data,
 # and its compose files mount the volumes below /var/www/nextcloud
 RUN mkdir -p /legacy/var/www && ln -s /app /legacy/var/www/nextcloud
+
+# signs core and the shipped apps with a CA of the build beside the Nextcloud
+# CA; the image has no shell, so the steps run in exec form, as root of this
+# stage only, which writes the release that the build stage owns
+FROM mwaeckerlin/php-fpm AS sign
+USER 0
+COPY --from=build /app /app
+COPY sign-release.php /usr/local/bin/sign-release.php
+RUN ["/usr/bin/php", "/usr/local/bin/sign-release.php", "/app"]
 
 FROM mwaeckerlin/php-fpm AS production
 # the variables of the legacy image, with its names and defaults
@@ -37,7 +50,7 @@ ENV OFFICE_WOPI_URL "http://collabora:9980"
 ENV OFFICE_PUBLIC_WOPI_URL ""
 ENV OFFICE_CALLBACK_URL ""
 ENV OFFICE_WOPI_ALLOWLIST ""
-COPY --from=build /app /app
+COPY --from=sign /app /app
 COPY --from=build /legacy/var/www /var/www
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php

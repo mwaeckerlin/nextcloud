@@ -1,0 +1,12 @@
+# Test overlay: an SMTP server with login beside the smtp-relay, standing in
+# for an external mail server (own Postfix, SendGrid, Gmail). Mailpit accepts
+# only the user nextcloud with the password e2e-mail-secret, and its API on
+# port 8025 lists the mails it received.
+services:
+  mailpit:
+    image: axllent/mailpit
+    environment:
+      MP_SMTP_AUTH: "nextcloud:e2e-mail-secret"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    networks:
+      - php-smtp
