@@ -23,6 +23,9 @@ cd "$(dirname "$0")/../.."
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-mwaeckerlin_nextcloud_e2e}"
 export COMPOSE_PROJECT_NAME
+# the stack plus an SMTP server with login for the mail tests and a browser
+# for the office test
+export COMPOSE_FILE=docker-compose.yml:tests/e2e/docker-compose.mail.yml:tests/e2e/docker-compose.office.yml
 
 NEXTCLOUD_HTTP_PORT="${NEXTCLOUD_HTTP_PORT:-8824}"
 HOST_VALUE="${HOST:-localhost:${NEXTCLOUD_HTTP_PORT}}"
@@ -115,6 +118,45 @@ BOTH_HOST=$(docker compose exec -T -e HOST=host.example.test -e URL=cloud.exampl
   php -r 'include "/app/config/custom.config.php"; echo $CONFIG["overwritehost"];')
 [[ "$BOTH_HOST" == "host.example.test" ]] || fail "HOST does not take precedence over URL: '$BOTH_HOST'"
 
+# --- Mail server: smtp-relay by default, a value saved by an administrator
+# (as Administration settings › Basic settings does) stays, NC_mail_smtphost
+# takes precedence over both.
+echo "[E2E] Checking the mail server settings"
+smtphost() {
+  docker compose exec -T "$@" nextcloud-php-fpm php /app/occ config:system:get mail_smtphost --no-warnings | tr -d '\r\n'
+}
+[[ "$(smtphost)" == "smtp-relay" ]] || fail "default mail server is not smtp-relay: '$(smtphost)'"
+docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set mail_smtphost --value=mail.example.test --no-warnings >/dev/null
+[[ "$(smtphost)" == "mail.example.test" ]] || fail "a saved mail server does not stay: '$(smtphost)'"
+[[ "$(smtphost -e NC_mail_smtphost=env.example.test)" == "env.example.test" ]] \
+  || fail "NC_mail_smtphost does not take precedence: '$(smtphost -e NC_mail_smtphost=env.example.test)'"
+docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set mail_smtphost --value=smtp-relay --no-warnings >/dev/null
+
+# --- External mail server through the variables: Nextcloud sends through
+# mailpit with login when MAIL_SMTPHOST, MAIL_SMTPPORT, MAIL_SMTPNAME and
+# MAIL_SMTPPASSWORD point there, and a wrong password delivers nothing.
+mailpit_count() {
+  docker compose exec -T nextcloud-php-fpm php -r \
+    'echo json_decode(file_get_contents("http://mailpit:8025/api/v1/messages"), true)["messages_count"] ?? -1;'
+}
+send_mail() {
+  docker compose exec -T -e MAIL_SMTPHOST=mailpit -e MAIL_SMTPPORT=1025 -e MAIL_SMTPNAME=nextcloud \
+    -e MAIL_SMTPPASSWORD="$1" nextcloud-php-fpm php -r '
+      require "/app/lib/base.php";
+      $mailer = \OCP\Server::get(\OCP\Mail\IMailer::class);
+      $message = $mailer->createMessage();
+      $message->setTo(["e2e@example.test" => "E2E"]);
+      $message->setSubject("e2e variables");
+      $message->setPlainBody("sent through MAIL_SMTPHOST");
+      exit(empty($mailer->send($message)) ? 0 : 1);' >/dev/null 2>&1
+}
+echo "[E2E] Sending mail through an external server set by variables"
+BEFORE=$(mailpit_count)
+send_mail e2e-mail-secret || fail "mail through MAIL_SMTPHOST with login failed"
+[[ "$(mailpit_count)" == "$((BEFORE + 1))" ]] || fail "mailpit did not receive the mail sent through the variables"
+send_mail wrong-password && fail "a wrong MAIL_SMTPPASSWORD still sent the mail"
+[[ "$(mailpit_count)" == "$((BEFORE + 1))" ]] || fail "mailpit received a mail sent with a wrong password"
+
 # As in the legacy image, maintenance mode counts as unhealthy, and the
 # check is healthy again once it ends.
 echo "[E2E] Checking the health check in maintenance mode"
@@ -196,11 +238,35 @@ collab_curl() {
     --silent --show-error --max-time 20 "$@"
 }
 
+# --- Integrity: the build signed core and the shipped apps again with its
+# own CA; the check stays active, passes, accepts richdocuments from the App
+# Store with the Nextcloud CA, and still finds a changed file.
+echo "[E2E] Checking the integrity of the release"
+CORE_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-core --no-warnings --output=json 2>&1) \
+  || fail "integrity check of core fails: $CORE_CHECK"
+APP_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app --all --no-warnings --output=json 2>&1) \
+  || fail "integrity check of the apps fails: $APP_CHECK"
+docker compose exec -T nextcloud-php-fpm php /app/occ app:list --no-warnings --output=json | grep -q '"richdocuments"' \
+  || fail "richdocuments is not installed, the check of an App Store app proves nothing"
+docker compose exec -T nextcloud-php-fpm php -r '
+  $src = "/app/apps/files"; $dst = "/tmp/files-check";
+  mkdir($dst);
+  $items = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+  foreach ($items as $item) {
+    $target = $dst . substr($item->getPathname(), strlen($src));
+    $item->isDir() ? mkdir($target) : copy($item->getPathname(), $target);
+  }
+  file_put_contents("$dst/appinfo/info.xml", "<!-- changed -->", FILE_APPEND);'
+CHANGED_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app files --path=/tmp/files-check --no-warnings --output=json 2>&1) \
+  && fail "integrity check does not notice a changed file: $CHANGED_CHECK"
+grep -q 'INVALID_HASH' <<<"$CHANGED_CHECK" || fail "integrity check names no INVALID_HASH: $CHANGED_CHECK"
+
 # --- WOPI configuration ------------------------------------------------
 # `enabled: yes` does not mean the bootstrap already ran
 # richdocuments:activate-config — wait for the keys instead of reading
 # them once (an unset key exits occ non-zero, which under `set -e` would
 # kill the script without any diagnostic).
+
 echo "[E2E] Checking WOPI configuration"
 deadline=$(( $(date +%s) + 120 ))
 while :; do
@@ -228,6 +294,32 @@ CB_URL=$(occ config:app:get richdocuments wopi_callback_url | tail -n1)
 WEBROOT_PATH=${CB_URL#http://nextcloud-nginx:8080}
 WEBROOT_PATH=${WEBROOT_PATH%/}
 echo "[E2E] detected webroot: '${WEBROOT_PATH:-/}'"
+
+# --- External mail server through the frontend: the three endpoints the form
+# under Administration settings › Basic settings calls save mailpit with
+# login, and «Send email» delivers the test mail there.
+echo "[E2E] Saving an external mail server through the administration settings"
+NC_BASE="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/index.php"
+admin_post() {
+  nc_curl -o /dev/null -w '%{http_code}' -u "${ADMIN_USER}:${ADMIN_PASS}" -H 'OCS-APIRequest: true' \
+    -X POST "${NC_BASE}$1" "${@:2}"
+}
+docker compose exec -T nextcloud-php-fpm php /app/occ user:setting "${ADMIN_USER}" settings email admin@example.test --no-warnings >/dev/null
+CODE=$(admin_post /settings/admin/mailsettings -d mail_domain=example.test -d mail_from_address=nextcloud \
+  -d mail_smtpmode=smtp -d mail_smtpsecure= -d mail_smtphost=mailpit -d mail_smtpauth=1 -d mail_smtpport=1025 \
+  -d mail_sendmailmode=smtp)
+[[ "$CODE" == "200" ]] || fail "saving the mail server answered $CODE"
+CODE=$(admin_post /settings/admin/mailsettings/credentials -d mail_smtpname=nextcloud -d mail_smtppassword=e2e-mail-secret)
+[[ "$CODE" == "200" ]] || fail "saving the mail credentials answered $CODE"
+BEFORE=$(mailpit_count)
+CODE=$(admin_post /settings/admin/mailtest)
+[[ "$CODE" == "200" ]] || fail "sending the test mail answered $CODE"
+[[ "$(mailpit_count)" == "$((BEFORE + 1))" ]] || fail "mailpit did not receive the test mail of the administration settings"
+for key in mail_smtpauth mail_smtpname mail_smtppassword; do
+  docker compose exec -T nextcloud-php-fpm php /app/occ config:system:delete "$key" --no-warnings >/dev/null
+done
+docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set mail_smtphost --value=smtp-relay --no-warnings >/dev/null
+docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set mail_smtpport --value=25 --no-warnings >/dev/null
 
 # --- Collabora discovery + capabilities -------------------------------
 echo "[E2E] Checking Collabora /hosting/discovery"
@@ -289,6 +381,26 @@ fi
 # Additionally check that the editor is loaded for exactly this document.
 grep -Eq "fileId=${FILE_ID}|\"fileid\":${FILE_ID}|\"fileid\":\"${FILE_ID}\"|initial-state-richdocuments" <<<"$EDITOR_HTML" \
   || fail "richdocuments editor page does not reference file ID ${FILE_ID}"
+
+# --- Office in a real browser: Collabora opens the document through nginx
+# under the address of the host, the text typed in it is saved, and WebDAV
+# delivers the saved document with that text.
+echo "[E2E] Editing the test document in Collabora in a browser"
+docker rm -f e2e-office-browser >/dev/null 2>&1 || true
+docker compose build office-browser >/dev/null
+OFFICE_EXIT=0
+docker compose run --name e2e-office-browser \
+  -e NC_URL="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}" \
+  -e NC_USER="${ADMIN_USER}" -e NC_PASSWORD="${ADMIN_PASS}" \
+  -e FILE_ID="${FILE_ID}" -e DAV_URL="${DAV_PUBLIC_BASE}/${TEST_DOC}" \
+  office-browser || OFFICE_EXIT=$?
+if [[ "$OFFICE_EXIT" != 0 ]]; then
+  docker cp e2e-office-browser:/tmp/office-failure.png "${HOST_TMP}/office-failure.png" >/dev/null 2>&1 \
+    && echo "[E2E] screenshot of the failure: ${HOST_TMP}/office-failure.png" >&2
+  docker rm -f e2e-office-browser >/dev/null 2>&1 || true
+  fail "office in the browser failed"
+fi
+docker rm -f e2e-office-browser >/dev/null 2>&1 || true
 
 # --- WebSocket app convention: /ws/<appid>/<path> -> <appid>-ws:3001/<path>
 # A stand-in backend named e2e-ws answers plain HTTP on port 3001 in the

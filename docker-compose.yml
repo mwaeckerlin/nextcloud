@@ -4,7 +4,7 @@ services:
       file: ./nginx/docker-compose.yml
       service: nextcloud-nginx
     ports:
-      - "8824:8080"
+      - "${NEXTCLOUD_HTTP_PORT:-8824}:8080"
     environment:
       WEBROOT: ${WEBROOT}
       MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
@@ -22,7 +22,7 @@ services:
       file: ./php-fpm/docker-compose.yml
       service: nextcloud-php-fpm
     environment:
-      HOST: ${HOST:-localhost:8824}
+      HOST: ${HOST:-localhost:${NEXTCLOUD_HTTP_PORT:-8824}}
       PROTOCOL: ${PROTOCOL:-http}
       WEBROOT: ${WEBROOT}
       UPLOAD_MAX_FILESIZE: ${UPLOAD_MAX_FILESIZE:-8G}
@@ -55,9 +55,9 @@ services:
   collabora:
     image: collabora/code
     environment:
-      server_name: ${HOST:-localhost:8824}
+      server_name: ${HOST:-localhost:${NEXTCLOUD_HTTP_PORT:-8824}}
       domain: nextcloud-nginx|localhost
-      aliasgroup1: http://nextcloud-nginx:8080,http://localhost:8824
+      aliasgroup1: http://nextcloud-nginx:8080,http://localhost:${NEXTCLOUD_HTTP_PORT:-8824}
       extra_params: --o:ssl.enable=false --o:ssl.termination=false
     cap_add:
       - MKNOD

@@ -69,18 +69,22 @@ $host = resolvePublicHost();
 $defaultSelfCheckUrl = $protocol . '://' . $host;
 $selfCheckUrl = getenv('SELF_CHECK_URL') ?: $defaultSelfCheckUrl;
 
+// What config.php holds: what an administrator saved under Administration
+// settings, or what the legacy image left there. Nextcloud reads this file
+// after config.php, so a value set here would hide it.
+$saved = (static function (): array {
+    $CONFIG = [];
+    if (is_file(__DIR__ . '/config.php')) {
+        include __DIR__ . '/config.php';
+    }
+    return $CONFIG;
+})();
+
 $CONFIG = [
     'log_type' => 'errorlog',
-    'loglevel' => (int) (getenv('LOGLEVEL') !== false ? getenv('LOGLEVEL') : 2),
     'logdateformat' => 'c',
     'debug' => getenv('DEBUG') === '1',
     'overwriteprotocol' => $protocol,
-    'maintenance_window_start' => 1,
-    'default_phone_region' => 'CH',
-    'mail_smtpmode' => 'smtp',
-    'mail_sendmailmode' => 'smtp',
-    'mail_smtphost' => 'smtp-relay',
-    'mail_smtpport' => '25',
     'apps_paths' => [
         [
             'path' => '/app/apps',
@@ -94,6 +98,52 @@ $CONFIG = [
         ],
     ],
 ];
+
+// Defaults an administrator may change: the mail server is the smtp-relay of
+// the compose stack. A saved value stays; the variables below and the NC_<key>
+// variables, which Nextcloud reads itself, take precedence over both.
+$defaults = [
+    'maintenance_window_start' => 1,
+    'default_phone_region' => 'CH',
+    'mail_smtpmode' => 'smtp',
+    'mail_sendmailmode' => 'smtp',
+    'mail_smtphost' => 'smtp-relay',
+    'mail_smtpport' => '25',
+    'loglevel' => 2,
+];
+foreach ($defaults as $key => $default) {
+    if (!array_key_exists($key, $saved)) {
+        $CONFIG[$key] = $default;
+    }
+}
+if (getenv('LOGLEVEL') !== false && getenv('LOGLEVEL') !== '') {
+    $CONFIG['loglevel'] = (int) getenv('LOGLEVEL');
+}
+
+// Mail server of a provider or an own MTA: a variable that is set takes
+// precedence over the saved value and the default smtp-relay:25. A user name
+// switches authentication on; the password comes from a Docker secret.
+$mailVariables = [
+    'MAIL_SMTPHOST' => 'mail_smtphost',
+    'MAIL_SMTPPORT' => 'mail_smtpport',
+    'MAIL_SMTPSECURE' => 'mail_smtpsecure',
+    'MAIL_SMTPNAME' => 'mail_smtpname',
+];
+foreach ($mailVariables as $variable => $key) {
+    $value = getenv($variable);
+    if (is_string($value) && $value !== '') {
+        $CONFIG[$key] = $value;
+    }
+}
+if (isset($CONFIG['mail_smtpname'])) {
+    $CONFIG['mail_smtpauth'] = true;
+}
+$smtpPassword = is_readable('/run/secrets/nextcloud_smtp_password')
+    ? trim((string) file_get_contents('/run/secrets/nextcloud_smtp_password'))
+    : (string) getenv('MAIL_SMTPPASSWORD');
+if ($smtpPassword !== '') {
+    $CONFIG['mail_smtppassword'] = $smtpPassword;
+}
 
 if ($serverId = getenv('SERVER_ID')) {
     $CONFIG['server_id'] = $serverId;

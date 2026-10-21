@@ -8,6 +8,10 @@ RUN gpg --dearmor < /tmp/nextcloud.asc > /tmp/nextcloud.gpg
 RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN find . -name '*.php' -exec sh -c 'rm "{}" && touch "{}"' \;
+# source maps: only the developer tools of a browser request them
+RUN find . -name '*.map' -delete
+# sample files php-fpm copies into the folder of a new user; no page links them
+RUN rm -rf core/skeleton
 
 FROM mwaeckerlin/nginx AS production
 ENV CONTAINERNAME "nextcloud-nginx"
