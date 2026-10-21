@@ -75,12 +75,73 @@ for image in "$@"; do
         _nextcloud_major "${image}"
         # Every PHP process holds one database connection while it answers,
         # so the pool must stay below max_connections of the database (151
-        # by default); the bound comes from the base image mwaeckerlin/php-fpm.
-        local_pool=$(docker run --rm --pull=never --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
-        if grep -qE 'pm\.max_children = 50$' <<< "${local_pool}"; then
-            _pass "${image}_php_fpm_max_children (50)"
+        # by default): MAX_REQUEST_WORKERS of the legacy image, default 100,
+        # read from the configuration php-fpm really loads (-tt prints it).
+        for workers in default 7; do
+            expected=$([[ ${workers} == default ]] && echo 100 || echo "${workers}")
+            env_args=()
+            [[ ${workers} == default ]] || env_args=(-e "MAX_REQUEST_WORKERS=${workers}")
+            pool=$(docker run --rm --pull=never "${env_args[@]}" --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
+            if grep -qE "pm\.max_children = ${expected}$" <<< "${pool}"; then
+                _pass "${image}_max_request_workers_${workers} (${expected})"
+            else
+                _fail "${image}_max_request_workers_${workers}" "pm.max_children is not ${expected}: '$(grep -E 'pm\.max_children|ERROR' <<< "${pool}")'"
+            fi
+        done
+        # The paths of the legacy image lead to the volumes of this one.
+        legacy_paths=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" \
+            -r 'foreach (["data", "config"] as $d) echo realpath("/var/www/nextcloud/$d"), " ";' 2> /dev/null)
+        if [[ "${legacy_paths}" == "/app/data /app/config " ]]; then
+            _pass "${image}_legacy_paths"
         else
-            _fail "${image}_php_fpm_max_children" "php-fpm -tt reports '$(grep -E 'pm\.max_children' <<< "${local_pool}")'"
+            _fail "${image}_legacy_paths" "/var/www/nextcloud does not lead to /app: '${legacy_paths}'"
+        fi
+        # The variables of the legacy image keep its names and defaults.
+        env_list=$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${image}" 2> /dev/null)
+        for pair in MEMORY_LIMIT=1000M UPLOAD_MAX_FILESIZE=8G MAX_INPUT_TIME=3600 MAX_REQUEST_WORKERS=100 \
+                    WAIT_SECONDS_FOR_MYSQL=300 HOST= URL= PROTOCOL=https WEBROOT= DEBUG=0 ADMIN_PWD=; do
+            if grep -qxF "${pair}" <<< "${env_list}"; then
+                _pass "${image}_env_${pair}"
+            else
+                _fail "${image}_env_${pair}" "image sets $(grep "^${pair%%=*}=" <<< "${env_list}" || echo nothing)"
+            fi
+        done
+        # WAIT_SECONDS_FOR_MYSQL bounds how long the installation waits for an
+        # unreachable database before php-fpm starts anyway; nothing listens
+        # on 127.0.0.1:3306, so every attempt is refused at once.
+        waiter=$(docker run -d --pull=never -e MYSQL_HOST=127.0.0.1 -e MYSQL_PASSWORD=x \
+            -e ADMIN_PWD=x -e WAIT_SECONDS_FOR_MYSQL=5 "${image}")
+        waited=""
+        for second in $(seq 1 90); do
+            if docker logs "${waiter}" 2>&1 | grep -q 'Installation did not complete within retry window'; then
+                waited=${second}
+                break
+            fi
+            sleep 1
+        done
+        waiter_log=$(docker logs "${waiter}" 2>&1)
+        docker rm -f "${waiter}" > /dev/null
+        if [[ -n "${waited}" ]] && grep -q 'waiting up to 5s for the database' <<< "${waiter_log}"; then
+            _pass "${image}_wait_seconds_for_mysql (gave up after ${waited}s)"
+        else
+            _fail "${image}_wait_seconds_for_mysql" "no end of the retry window within 90s, log: $(grep 'nextcloud-office-bootstrap' <<< "${waiter_log}" | cut -c1-300)"
+        fi
+        # The image carries its health check as default, so a stack without a
+        # healthcheck block in its compose file gets it too; it runs php
+        # directly, the image has no shell. Timing as in the legacy image.
+        health=$(docker image inspect --format '{{json .Config.Healthcheck}}' "${image}" 2> /dev/null)
+        if grep -q '"Test":\["CMD","/usr/bin/php","/usr/local/bin/health.php"\]' <<< "${health}" \
+            && grep -q '"StartPeriod":300000000000' <<< "${health}" \
+            && grep -q '"Retries":240' <<< "${health}"; then
+            _pass "${image}_healthcheck_default"
+        else
+            _fail "${image}_healthcheck_default" "no HEALTHCHECK running /usr/local/bin/health.php with start period 300s and 240 retries: ${health}"
+        fi
+        # Without a running php-fpm the check must report unhealthy.
+        if docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" /usr/local/bin/health.php > /dev/null 2>&1; then
+            _fail "${image}_healthcheck_unhealthy_without_fpm" "health.php reports healthy while php-fpm does not run"
+        else
+            _pass "${image}_healthcheck_unhealthy_without_fpm"
         fi
     fi
 done

@@ -34,11 +34,12 @@ services:
     image: mwaeckerlin/nextcloud:nginx
     environment:
       WEBROOT:
+      MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
     volumes:
       - apps:/app/custom_apps:ro
     depends_on:
       nextcloud-php-fpm:
-        condition: service_started
+        condition: service_healthy
     networks:
       - php-network
       - collabora-network
@@ -50,6 +51,9 @@ services:
       HOST: ${HOST}
       PROTOCOL: ${PROTOCOL:-https}
       WEBROOT: ${WEBROOT}
+      UPLOAD_MAX_FILESIZE: ${UPLOAD_MAX_FILESIZE:-8G}
+      MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
+      MEMORY_LIMIT: ${MEMORY_LIMIT:-1000M}
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud

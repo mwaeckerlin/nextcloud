@@ -30,6 +30,10 @@ PROTOCOL_VALUE="${PROTOCOL:-http}"
 export HOST="$HOST_VALUE"
 export PROTOCOL="$PROTOCOL_VALUE"
 export WEBROOT="${WEBROOT:-}"
+# limits above the image defaults, so the test proves they reach php-fpm and nginx
+export UPLOAD_MAX_FILESIZE=20G
+export MAX_INPUT_TIME=7200
+export MEMORY_LIMIT=1500M
 
 if [[ ! -f .env ]]; then
   cp .env.sample .env
@@ -73,6 +77,88 @@ while :; do
   fi
   sleep 5
 done
+
+# --- Health check: php-fpm serves status.php and Nextcloud is installed ---
+echo "[E2E] Waiting until nextcloud-php-fpm reports healthy"
+PHP_CONTAINER=$(docker compose ps -q nextcloud-php-fpm)
+deadline=$(( $(date +%s) + 600 ))
+while :; do
+  HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$PHP_CONTAINER" 2>/dev/null || true)
+  [[ "$HEALTH" == "healthy" ]] && break
+  if (( $(date +%s) > deadline )); then
+    docker inspect --format '{{json .State.Health}}' "$PHP_CONTAINER" >&2 || true
+    fail "nextcloud-php-fpm did not become healthy (status: '$HEALTH')"
+  fi
+  sleep 5
+done
+
+# --- Limits from the environment: UPLOAD_MAX_FILESIZE, MEMORY_LIMIT,
+# MAX_INPUT_TIME reach the php-fpm workers, MAX_INPUT_TIME the FastCGI
+# timeout of nginx; measured in a worker, requested over FastCGI.
+echo "[E2E] Checking the limits of the php-fpm workers"
+docker compose cp tests/e2e/ini-probe.php nextcloud-php-fpm:/tmp/ini-probe.php >/dev/null
+LIMITS=$(docker compose exec -T nextcloud-php-fpm php -r \
+  'require "/usr/local/bin/fastcgi.php"; echo fastcgiGet("/tmp/ini-probe.php", "/ini-probe.php");')
+for expected in '"upload_max_filesize":"20G"' '"post_max_size":"20G"' '"memory_limit":"1500M"' \
+                '"max_input_time":"7200"' '"max_execution_time":"7200"'; do
+  grep -qF "$expected" <<<"$LIMITS" || fail "php-fpm worker lacks $expected: $LIMITS"
+done
+docker compose exec -T nextcloud-nginx nginx -T 2>/dev/null | grep -q 'fastcgi_read_timeout 7200s' \
+  || fail "nginx does not wait 7200s for php-fpm (fastcgi_read_timeout)"
+
+# --- URL is the older name of HOST and still sets the public host --------
+echo "[E2E] Checking URL as replacement for HOST"
+URL_HOST=$(docker compose exec -T -e HOST= -e URL=cloud.example.test nextcloud-php-fpm \
+  php -r 'include "/app/config/custom.config.php"; echo $CONFIG["overwritehost"];')
+[[ "$URL_HOST" == "cloud.example.test" ]] || fail "URL does not set the public host: '$URL_HOST'"
+BOTH_HOST=$(docker compose exec -T -e HOST=host.example.test -e URL=cloud.example.test nextcloud-php-fpm \
+  php -r 'include "/app/config/custom.config.php"; echo $CONFIG["overwritehost"];')
+[[ "$BOTH_HOST" == "host.example.test" ]] || fail "HOST does not take precedence over URL: '$BOTH_HOST'"
+
+# As in the legacy image, maintenance mode counts as unhealthy, and the
+# check is healthy again once it ends.
+echo "[E2E] Checking the health check in maintenance mode"
+docker compose exec -T nextcloud-php-fpm php /app/occ maintenance:mode --on --no-ansi >/dev/null
+HEALTH_OUT=$(docker compose exec -T nextcloud-php-fpm php /usr/local/bin/health.php 2>&1) \
+  && fail "health check is healthy in maintenance mode: $HEALTH_OUT"
+grep -q 'maintenance' <<<"$HEALTH_OUT" \
+  || fail "health check does not name maintenance mode: $HEALTH_OUT"
+docker compose exec -T nextcloud-php-fpm php /app/occ maintenance:mode --off --no-ansi >/dev/null
+docker compose exec -T nextcloud-php-fpm php /usr/local/bin/health.php >/dev/null \
+  || fail "health check stays unhealthy after maintenance mode ended"
+
+# --- Background jobs: the cron loop ran cron.php, which switched Nextcloud
+# from AJAX to cron mode and recorded its run.
+echo "[E2E] Checking the background jobs"
+# occ prints a warning about the missing pcntl extension of the base image
+# in front of the value, on the same line
+MODE=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core backgroundjobs_mode --no-ansi | tr -d '\r\n')
+MODE=${MODE##*php.ini.}
+[[ "$MODE" == "cron" ]] || fail "background jobs do not run by cron (mode: '$MODE')"
+# cron.php records lastcron when its first run ends, at most one interval later
+deadline=$(( $(date +%s) + 900 ))
+while :; do
+  LASTCRON=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core lastcron --no-ansi 2>/dev/null | tr -d '\r\n' || true)
+  LASTCRON=${LASTCRON##*php.ini.}
+  [[ "$LASTCRON" =~ ^[0-9]+$ && "$LASTCRON" -gt 0 ]] && break
+  (( $(date +%s) > deadline )) && fail "cron.php never completed a run (lastcron: '$LASTCRON')"
+  sleep 10
+done
+
+# --- Every start upgrades and repairs, as the legacy image does: a container
+# stopped in maintenance mode comes back healthy.
+echo "[E2E] Restarting php-fpm in maintenance mode"
+docker compose exec -T nextcloud-php-fpm php /app/occ maintenance:mode --on --no-ansi >/dev/null
+docker compose restart nextcloud-php-fpm >/dev/null
+deadline=$(( $(date +%s) + 600 ))
+while :; do
+  HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q nextcloud-php-fpm)")
+  [[ "$HEALTH" == "healthy" ]] && break
+  (( $(date +%s) > deadline )) && fail "nextcloud-php-fpm not healthy after restart in maintenance mode (status: '$HEALTH')"
+  sleep 5
+done
+docker compose logs nextcloud-php-fpm | grep -q 'Upgrading and repairing the installation' \
+  || fail "the start did not upgrade and repair the installation"
 
 echo "[E2E] Waiting until richdocuments is enabled"
 deadline=$(( $(date +%s) + 300 ))
