@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-21 **1.1.4**
+    - The PHP CLI that installs and upgrades Nextcloud comes from `mwaeckerlin/php-fpm` 1.2.6, which builds on the official PHP image; the image no longer copies the CLI of the Alpine PHP packages, which found no modules on the new base
+
 - 2026-10-03 **1.1.3**
     - The images `nginx-30` to `nginx-32` and `php-fpm-30` to `php-fpm-32` are no longer rebuilt: Nextcloud 30 to 32 refuse PHP 8.5, the only PHP of the base image, so these tags never installed. Their published tags stay; the legacy tags `30` to `35` remain the upgrade path for Nextcloud 30 to 32.
 
