@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-22 **1.1.9**
+    - The image `php-fpm` builds on `mwaeckerlin/php-fpm` 1.2.10, which takes its PHP limits from variables; in this image `UPLOAD_MAX_FILESIZE`, `MAX_INPUT_TIME` and `MAX_REQUEST_WORKERS` keep setting `post_max_size`, `max_execution_time` and `pm.max_children`, as in the legacy image.
+
 - 2026-10-22 **1.1.8**
     - The image `php-fpm` builds on `mwaeckerlin/php-fpm` 1.2.9: its health check uses the FastCGI client of the base image, and `occ` runs without the warning about the missing `pcntl`.
 

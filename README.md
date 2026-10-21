@@ -179,6 +179,8 @@ Any other mail setting, and any setting of `config.php`, is set by the variable 
 
 ### Further PHP settings
 
+The base image `mwaeckerlin/php-fpm` also knows `POST_MAX_SIZE`, `MAX_EXECUTION_TIME` and `MAX_CHILDREN`. In this image they follow the variables of the legacy image and are not set on their own: `UPLOAD_MAX_FILESIZE` sets `post_max_size`, `MAX_INPUT_TIME` sets `max_execution_time`, `MAX_REQUEST_WORKERS` sets `pm.max_children`.
+
 A PHP setting without a variable above, such as the sizes of OPcache, goes into an `.ini` file mounted into `/usr/local/etc/php/conf.d/` of `nextcloud-php-fpm`. The five limits that `UPLOAD_MAX_FILESIZE`, `MEMORY_LIMIT` and `MAX_INPUT_TIME` set reach php-fpm as `-d` options, which take precedence over every `.ini` file, so they change only through the variables.
 
 ### Database connections
