@@ -385,8 +385,8 @@ NGINX strips `/ws/<appid>` and proxies `<path>` (and the query string) through t
 
 ```yaml
 services:
-  parlwin-ws:
-    image: my-org/parlwin-realtime:latest
+  myapp-ws:
+    image: my-org/myapp-realtime:latest
     environment:
       PORT: 3001
     networks:
@@ -396,10 +396,10 @@ services:
 That's all the admin has to do. Frontend code uses:
 
 ```js
-const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/parlwin/`;
+const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/myapp/`;
 ```
 
-Backend service-to-service calls (e.g. publishing events from PHP-FPM to the WS broker) still use the internal hostname directly (`http://parlwin-ws:3001/publish`), bypassing nginx.
+Backend service-to-service calls (e.g. publishing events from PHP-FPM to the WS broker) still use the internal hostname directly (`http://myapp-ws:3001/publish`), bypassing nginx.
 
 ### Third-party apps with fixed paths
 
