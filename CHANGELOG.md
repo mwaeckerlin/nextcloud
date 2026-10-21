@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-22 **1.1.8**
+    - The image `php-fpm` builds on `mwaeckerlin/php-fpm` 1.2.9: its health check uses the FastCGI client of the base image, and `occ` runs without the warning about the missing `pcntl`.
+
 - 2026-10-22 **1.1.7**
     - The image `nginx` leaves out the source maps of the JavaScript bundles and the sample files of new users, which no browser requests: about 300M less.
     - The image `php-fpm` leaves out the source maps and keeps JavaScript and CSS as empty files. The build signs the release again with a CA of its own beside the Nextcloud CA, so the integrity check stays active and passes.

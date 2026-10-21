@@ -172,16 +172,14 @@ docker compose exec -T nextcloud-php-fpm php /usr/local/bin/health.php >/dev/nul
 # --- Background jobs: the cron loop ran cron.php, which switched Nextcloud
 # from AJAX to cron mode and recorded its run.
 echo "[E2E] Checking the background jobs"
-# occ prints a warning about the missing pcntl extension of the base image
-# in front of the value, on the same line
+# without --no-warnings: occ must print the bare value, so the base image
+# carries pcntl
 MODE=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core backgroundjobs_mode --no-ansi | tr -d '\r\n')
-MODE=${MODE##*php.ini.}
 [[ "$MODE" == "cron" ]] || fail "background jobs do not run by cron (mode: '$MODE')"
 # cron.php records lastcron when its first run ends, at most one interval later
 deadline=$(( $(date +%s) + 900 ))
 while :; do
   LASTCRON=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core lastcron --no-ansi 2>/dev/null | tr -d '\r\n' || true)
-  LASTCRON=${LASTCRON##*php.ini.}
   [[ "$LASTCRON" =~ ^[0-9]+$ && "$LASTCRON" -gt 0 ]] && break
   (( $(date +%s) > deadline )) && fail "cron.php never completed a run (lastcron: '$LASTCRON')"
   sleep 10

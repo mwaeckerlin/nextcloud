@@ -8,6 +8,7 @@ declare(strict_types=1);
 // and answers, and Nextcloud reports `installed: true`, `maintenance: false`
 // and `needsDbUpgrade: false`.
 
+// FastCGI client of the base image mwaeckerlin/php-fpm
 require __DIR__ . '/fastcgi.php';
 
 function unhealthy(string $reason): never
