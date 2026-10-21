@@ -2,8 +2,8 @@
 
 Lean, hardened Nextcloud stack with two images:
 
-- [mwaeckerlin/nextcloud:nginx]: NGINX Nextcloud frontend in only 608MB
-- [mwaeckerlin/nextcloud:php-fpm]: PHP‑FPM Nextcloud backend in only 868MB
+- [mwaeckerlin/nextcloud:nginx]: NGINX Nextcloud frontend in only 317MB
+- [mwaeckerlin/nextcloud:php-fpm]: PHP‑FPM Nextcloud backend in only 647MB
 
 This splitting is in accordance to Docker philosophy of having only one server process per image and to NGINX which splits PHP processing into a separate service. It therefore also follows strong microservice architecture.
 
@@ -16,13 +16,13 @@ Both together are the most lean and secure images for Nextcloud:
  - all PHP files are empty stubs in the NGINX frontend
  - passwords never in environment variables, delivered as Docker secrets
 
-Most of the combined 1476MB footprint is the Nextcloud distribution itself, stored in both images.
+Most of the combined 964MB footprint is the Nextcloud distribution itself. Each image keeps only the part its server reads: `nginx` the files a browser requests, `php-fpm` the PHP code with empty JavaScript and CSS files and no source maps.
 
 Compared to the official [nextcloud] image, this package has:
  - Less attack surface.
  - Better encapsulation.
  - Running as non-privileged user.
- - Much smaller: ~608MB (nginx) + ~868MB (php-fpm) vs. ~1.43GB for the official `nextcloud:latest` image.
+ - Much smaller: ~317MB (nginx) + ~647MB (php-fpm) vs. ~1.43GB for the official `nextcloud:latest` image.
  - Clear segmentation: only NGINX can reach PHP, only PHP can reach the DB; networks are isolated and marked `encrypted` (e.g. when run in Docker Swarm).
  - Headless: no shell, no package manager at runtime.
  - Configurable via environment (NGINX through envwrap templates, Nextcloud via `custom.config.php` reading `getenv()`).
@@ -62,6 +62,7 @@ The stack needs these secrets:
 |--------------------------|---------------------------------------|--------------------------------|
 | `nextcloud_db_password`  | `nextcloud-php-fpm`, `nextcloud-db`   | MariaDB password               |
 | `nextcloud_admin_password` | `nextcloud-php-fpm`                 | Initial Nextcloud admin password |
+| `nextcloud_smtp_password` | `nextcloud-php-fpm`, optional        | Password of an external mail server; see [Mail server](#mail-server) |
 
 ### Creating secrets
 
@@ -138,10 +139,47 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `OFFICE_PUBLIC_WOPI_URL`: optional override for the public WOPI URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
   - `APPSTORE_TIMEOUT`: app-store fetch timeout in seconds for installing `richdocuments`; default `600` (the ~12 MB store index aborts at Nextcloud's 120 s default on slow connections).
+  - `MAIL_FROM_ADDRESS` (default `nextcloud`) and `MAIL_DOMAIN` (default: `HOST` without port): the sender of mails, `mail_from_address@mail_domain`.
+  - `LOGLEVEL`: Nextcloud log level, `0` debug to `4` fatal; unset, the level saved under Administration settings applies, otherwise `2`.
+  - `MAIL_SMTPHOST`, `MAIL_SMTPPORT`, `MAIL_SMTPSECURE`, `MAIL_SMTPNAME`, `MAIL_SMTPPASSWORD`: an external mail server; see [Mail server](#mail-server).
+  - `NC_<key>`: Nextcloud itself reads every setting of `config.php` from a variable of that name, e.g. `NC_mail_smtpauthtype`; such a variable takes precedence over every config file.
 
 - **collabora**
   - `COLLABORA_SERVER_NAME`: browser-visible host name for the office frontend; defaults to `HOST`.
   - `aliasgroup1`: allowlist of accepted WOPI origins. In this setup it must include both the internal Nextcloud URL and, if needed, the browser-facing local URL.
+
+### Mail server
+
+Nextcloud sends mails over SMTP to `smtp-relay:25`, the relay of the compose setup. Another server, an own Postfix, SendGrid or Gmail, is set in one of two ways:
+
+- **Administration settings › Basic settings › Email server**, with «Send email» to test it. The server saved there stays in effect across restarts and new images; so does the mail server a legacy image left in `config.php`.
+- **Variables of `nextcloud-php-fpm`**, which take precedence over what is saved:
+
+| Variable | Meaning |
+| --- | --- |
+| `MAIL_SMTPHOST` | SMTP server, e.g. `smtp.gmail.com` |
+| `MAIL_SMTPPORT` | its port, e.g. `587` for STARTTLS, `465` for TLS |
+| `MAIL_SMTPSECURE` | `ssl` for TLS from the first byte (port 465); empty, Nextcloud uses STARTTLS where the server offers it |
+| `MAIL_SMTPNAME` | user name; set, it switches the login on |
+| secret `nextcloud_smtp_password` | password of that user; `MAIL_SMTPPASSWORD` where no secret is used |
+
+```yaml
+  nextcloud-php-fpm:
+    environment:
+      MAIL_SMTPHOST: smtp.sendgrid.net
+      MAIL_SMTPPORT: 587
+      MAIL_SMTPNAME: apikey
+    secrets:
+      - nextcloud_smtp_password
+```
+
+For Gmail it is `smtp.gmail.com`, port `465` with `MAIL_SMTPSECURE: ssl`, the Gmail address as `MAIL_SMTPNAME` and an app password of that Google account. For an own Postfix it is its host name and the port and login it offers.
+
+Any other mail setting, and any setting of `config.php`, is set by the variable `NC_<key>` that Nextcloud reads itself, e.g. `NC_mail_smtpauthtype`; it takes precedence over everything above. The same order — variable, then saved value, then image default — holds for `default_phone_region` (default `CH`) and `maintenance_window_start` (default `1`).
+
+### Further PHP settings
+
+A PHP setting without a variable above, such as the sizes of OPcache, goes into an `.ini` file mounted into `/usr/local/etc/php/conf.d/` of `nextcloud-php-fpm`. The five limits that `UPLOAD_MAX_FILESIZE`, `MEMORY_LIMIT` and `MAX_INPUT_TIME` set reach php-fpm as `-d` options, which take precedence over every `.ini` file, so they change only through the variables.
 
 ### Database connections
 
@@ -175,6 +213,17 @@ The timing is that of the legacy image: a start period of 300 seconds, then 240 
 ```
 
 The result of the last checks stands in `docker inspect --format '{{json .State.Health}}' <container>`.
+
+### Integrity check
+
+Nextcloud compares every file of core and of each app with the hashes in `core/signature.json` and `appinfo/signature.json`, which a certificate signs, and reports a difference under Administration settings › Overview. The `php-fpm` image changes files of the release, so the build signs it again:
+
+1. `sign-release.php` creates a CA and a certificate named `core` in a build stage of its own.
+2. It appends the CA to `resources/codesigning/root.crt`, after the Nextcloud CA. Nextcloud loads every certificate in that file as a CA, in the integrity check and in the installer of the App Store.
+3. It signs core and every shipped app with `occ integrity:sign-core` and `occ integrity:sign-app`; a certificate named `core` may sign apps too.
+4. The private keys stay in that build stage; nobody can sign with them afterwards.
+
+The check stays active: `occ integrity:check-core` and `occ integrity:check-app --all` pass, apps from the App Store still verify against the Nextcloud CA, and a changed file is reported.
 
 ### Start and background jobs
 
@@ -386,8 +435,8 @@ Security note: the browser should normally reach Collabora only through `nextclo
 Webroot note: if Nextcloud is published below a subpath such as `/nextcloud`, set `WEBROOT=/nextcloud` on both `nextcloud-nginx` and `nextcloud-php-fpm`. The browser entrypoint then becomes, for example, `http://localhost:8824/nextcloud`.
 
 Service roles:
-- [mwaeckerlin/nextcloud:nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud:php-fpm] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs.
-- [mwaeckerlin/nextcloud:php-fpm]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request; applies office defaults via `office-bootstrap.php`.
+- [mwaeckerlin/nextcloud:nginx]: HTTP endpoint; forwards PHP requests to [mwaeckerlin/nextcloud:php-fpm] via `PHP_FPM_HOST`/`PHP_FPM_PORT`; serves Nextcloud static assets directly; all `.php` files are empty stubs. It leaves out the source maps (`*.map`), which only the developer tools of a browser request, and `core/skeleton`, the sample files `php-fpm` copies into the folder of a new user.
+- [mwaeckerlin/nextcloud:php-fpm]: runs Nextcloud/PHP-FPM; performs headless installation on the first request via `autoconfig.php`; reads runtime config from `custom.config.php` at every request; applies office defaults via `office-bootstrap.php`. It leaves out the source maps and keeps JavaScript and CSS as empty files, because PHP only checks that they exist and the browser gets them from `nginx`; see [Integrity check](#integrity-check).
 - `collabora`: office backend reachable internally by NGINX and PHP-FPM; browser traffic should be proxied through NGINX.
 - `nextcloud-db`: MariaDB database; reachable only from `nextcloud-php-fpm`.
 - `smtp-relay`: mail relay reachable only from `nextcloud-php-fpm`.

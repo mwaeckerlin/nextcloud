@@ -71,8 +71,63 @@ for image in "$@"; do
     _no_interpreter "${image}" /bin/bash    bash    -c :
     _no_interpreter "${image}" /bin/busybox busybox ls /
     _no_interpreter "${image}" /usr/bin/perl perl   -e 1
+    if [[ "${image}" == *:nginx* ]]; then
+        # The nginx image leaves out what no browser requests: source maps and
+        # the sample files of new users. The browser still loads the bundles
+        # and both forms of the translations (l10n/<lang>.js, and
+        # l10n/<lang>.json through loadTranslations of @nextcloud/l10n).
+        lister=$(docker create --pull=never "${image}")
+        files=$(docker export "${lister}" | tar -t)
+        docker rm "${lister}" > /dev/null
+        if grep -q '\.map$' <<< "${files}"; then
+            _fail "${image}_no_source_maps" "$(grep -c '\.map$' <<< "${files}") .map files in the image"
+        else
+            _pass "${image}_no_source_maps"
+        fi
+        if grep -q '^app/core/skeleton/' <<< "${files}"; then
+            _fail "${image}_no_skeleton" "app/core/skeleton is in the image"
+        else
+            _pass "${image}_no_skeleton"
+        fi
+        for kept in app/dist/core-common.js app/core/l10n/de.js app/core/l10n/de.json; do
+            if grep -qx "${kept}" <<< "${files}"; then
+                _pass "${image}_keeps_${kept}"
+            else
+                _fail "${image}_keeps_${kept}" "${kept} is missing"
+            fi
+        done
+    fi
     if [[ "${image}" == *:php-fpm* ]]; then
         _nextcloud_major "${image}"
+        # php-fpm only checks that the browser files exist: no source maps,
+        # JavaScript and CSS are empty, and the release is signed again by a
+        # CA of the build that root.crt lists after the Nextcloud CA.
+        lister=$(docker create --pull=never "${image}")
+        listing=$(docker export "${lister}" | tar -tv)
+        root_crt=$(docker export "${lister}" | tar -xO app/resources/codesigning/root.crt)
+        docker rm "${lister}" > /dev/null
+        if grep -q '\.map$' <<< "${listing}"; then
+            _fail "${image}_no_source_maps" "$(grep -c '\.map$' <<< "${listing}") .map files in the image"
+        else
+            _pass "${image}_no_source_maps"
+        fi
+        core_common=$(grep -E ' app/dist/core-common\.js$' <<< "${listing}" | awk '{print $3}')
+        if [[ "${core_common}" == "0" ]]; then
+            _pass "${image}_empty_browser_files"
+        else
+            _fail "${image}_empty_browser_files" "app/dist/core-common.js has '${core_common}' bytes"
+        fi
+        nginx_image="${image/:php-fpm/:nginx}"
+        lister=$(docker create --pull=never "${nginx_image}")
+        nextcloud_ca=$(docker export "${lister}" | tar -xO app/resources/codesigning/root.crt)
+        docker rm "${lister}" > /dev/null
+        # the release ships one or more CAs of Nextcloud; the build adds one
+        expected_cas=$(( $(grep -c 'BEGIN CERTIFICATE' <<< "${nextcloud_ca}") + 1 ))
+        if [[ $(grep -c 'BEGIN CERTIFICATE' <<< "${root_crt}") == "${expected_cas}" && "${root_crt}" == "${nextcloud_ca}"* ]]; then
+            _pass "${image}_root_crt_keeps_nextcloud_ca"
+        else
+            _fail "${image}_root_crt_keeps_nextcloud_ca" "root.crt holds $(grep -c 'BEGIN CERTIFICATE' <<< "${root_crt}") certificates, expected ${expected_cas}, Nextcloud CAs first: $([[ "${root_crt}" == "${nextcloud_ca}"* ]] && echo yes || echo no)"
+        fi
         # Every PHP process holds one database connection while it answers,
         # so the pool must stay below max_connections of the database (151
         # by default): MAX_REQUEST_WORKERS of the legacy image, default 100,
