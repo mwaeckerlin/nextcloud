@@ -89,6 +89,20 @@ else
     else
         _fail "apache_config_valid_with_override" "apache2ctl -t fails with MAX_REQUEST_WORKERS=37"
     fi
+    # session upload progress is off for the PHP Apache runs and locked
+    # against .htaccess: the mitigation named with the leaked details of
+    # CVE-2026-109618 and CVE-2026-109619
+    progress=$(_run /bin/sh "${image}" -c 'PHP_INI_SCAN_DIR=$(ls -d /etc/php/*/apache2/conf.d | head -n 1) php -c "$(ls /etc/php/*/apache2/php.ini | head -n 1)" -r "echo ini_get(\"session.upload_progress.enabled\") ? \"On\" : \"Off\";"')
+    if [[ "${progress}" == "Off" ]]; then
+        _pass "session_upload_progress_off"
+    else
+        _fail "session_upload_progress_off" "PHP under Apache reports '${progress}'"
+    fi
+    if _run /bin/grep "${image}" -q 'php_admin_flag session.upload_progress.enabled off' /nextcloud.conf; then
+        _pass "session_upload_progress_locked"
+    else
+        _fail "session_upload_progress_locked" "nextcloud.conf does not lock session.upload_progress.enabled off"
+    fi
     if _run /bin/grep "${image}" -q max_connections /start.sh; then
         _fail "no_database_limit_change" "/start.sh still changes max_connections of the database"
     else

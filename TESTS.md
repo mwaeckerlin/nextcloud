@@ -15,6 +15,7 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 - **F1** the PHP modules gd, mysqli, pdo_mysql, curl, mbstring, intl, xml and zip are loaded, `/usr/sbin/apache2` runs, `/start.sh` is executable.
 - **F2** the image carries the Nextcloud major version the branch names in `ENV SOURCE_FILE`.
 - **F3** `MAX_REQUEST_WORKERS` defaults to 100, `mpm_prefork.conf` takes `MaxRequestWorkers` and `ServerLimit` from it, Apache accepts the configuration with `MAX_REQUEST_WORKERS=37`, and `/start.sh` never changes `max_connections`.
+- **F5** session_upload_progress_off, session_upload_progress_locked: PHP with the configuration Apache loads reports `session.upload_progress.enabled` as Off, and `/nextcloud.conf` locks it with `php_admin_flag`.
 
 ## Workflow contract
 
