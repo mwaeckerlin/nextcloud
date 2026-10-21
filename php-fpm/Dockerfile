@@ -58,7 +58,8 @@ COPY custom.config.php /app/config/custom.config.php
 COPY custom.config.php /usr/local/share/nextcloud/custom.config.php
 COPY --chmod=755 office-bootstrap.php /usr/local/bin/office-bootstrap.php
 COPY --chmod=644 cron.php /usr/local/bin/cron.php
-COPY --chmod=644 fastcgi.php /usr/local/bin/fastcgi.php
+# replaces the ping check of mwaeckerlin/php-fpm and uses its FastCGI client
+# /usr/local/bin/fastcgi.php
 COPY --chmod=644 health.php /usr/local/bin/health.php
 COPY --chmod=644 zz-nextcloud.conf /usr/local/etc/php-fpm.d/zz-nextcloud.conf
 ENTRYPOINT ["/usr/bin/php", "/usr/local/bin/office-bootstrap.php"]
