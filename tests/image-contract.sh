@@ -76,12 +76,11 @@ for image in "$@"; do
         # Every PHP process holds one database connection while it answers,
         # so the pool must stay below max_connections of the database (151
         # by default); the bound comes from the base image mwaeckerlin/php-fpm.
-        local_pool=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" \
-            -r 'foreach (glob("/etc/php*/php-fpm.d/www.conf") as $f) echo file_get_contents($f);' 2> /dev/null)
-        if grep -qE '^pm\.max_children *= *50$' <<< "${local_pool}"; then
+        local_pool=$(docker run --rm --pull=never --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
+        if grep -qE 'pm\.max_children = 50$' <<< "${local_pool}"; then
             _pass "${image}_php_fpm_max_children (50)"
         else
-            _fail "${image}_php_fpm_max_children" "pm.max_children is not 50 in /etc/php*/php-fpm.d/www.conf: '$(grep -E '^pm\.max_children' <<< "${local_pool}")'"
+            _fail "${image}_php_fpm_max_children" "php-fpm -tt reports '$(grep -E 'pm\.max_children' <<< "${local_pool}")'"
         fi
     fi
 done
