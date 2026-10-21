@@ -22,7 +22,7 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 - **F1** no sh, no bash, no busybox, no perl in either image; the `nginx` image holds no `*.map` file and no `app/core/skeleton`, and keeps `app/dist/core-common.js`, `app/core/l10n/de.js` and `app/core/l10n/de.json`; the `php-fpm` image holds no `*.map` file and an empty `app/dist/core-common.js`.
 - **F11** `resources/codesigning/root.crt` of the `php-fpm` image holds one certificate more than the release and starts with the unchanged certificates of the release, as the `nginx` image carries them.
 - **F5** the `php-fpm` image carries the Nextcloud major version the branch names in `ARG SOURCE_FILE`.
-- **F7** `php-fpm -tt` in the `php-fpm` image loads `pm.max_children = 100` by default and `7` with `MAX_REQUEST_WORKERS=7`.
+- **F7** `php-fpm -tt` in the `php-fpm` image loads `pm.max_children = 100` by default, `7` with `MAX_REQUEST_WORKERS=7`, and still `100` with `MAX_CHILDREN=7` of the base image.
 - **F8** the `php-fpm` image carries a `HEALTHCHECK` that runs `/usr/bin/php /usr/local/bin/health.php` with a start period of 300 seconds and 240 retries, and the check reports unhealthy in a container where php-fpm does not run.
 - **F9** `/var/www/nextcloud/data` and `/var/www/nextcloud/config`, the paths of the legacy image, resolve to `/app/data` and `/app/config`; the `php-fpm` image sets the variables of the legacy image with its defaults; with an unreachable database and `WAIT_SECONDS_FOR_MYSQL=5` the installation gives up within 90 seconds and logs the window of 5 seconds.
 
