@@ -143,6 +143,14 @@ for image in "$@"; do
                 _fail "${image}_max_request_workers_${workers}" "pm.max_children is not ${expected}: '$(grep -E 'pm\.max_children|ERROR' <<< "${pool}")'"
             fi
         done
+        # MAX_CHILDREN of the base image does not override MAX_REQUEST_WORKERS:
+        # zz-nextcloud.conf is read after www.conf of the base image.
+        pool=$(docker run --rm --pull=never -e MAX_CHILDREN=7 --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
+        if grep -qE "pm\.max_children = 100$" <<< "${pool}"; then
+            _pass "${image}_max_request_workers_over_max_children"
+        else
+            _fail "${image}_max_request_workers_over_max_children" "MAX_CHILDREN=7 changed the pool: '$(grep -E 'pm\.max_children|ERROR' <<< "${pool}")'"
+        fi
         # The paths of the legacy image lead to the volumes of this one.
         legacy_paths=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" \
             -r 'foreach (["data", "config"] as $d) echo realpath("/var/www/nextcloud/$d"), " ";' 2> /dev/null)

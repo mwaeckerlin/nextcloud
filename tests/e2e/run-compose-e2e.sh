@@ -395,6 +395,7 @@ docker compose run --name e2e-office-browser \
 if [[ "$OFFICE_EXIT" != 0 ]]; then
   docker cp e2e-office-browser:/tmp/office-failure.png "${HOST_TMP}/office-failure.png" >/dev/null 2>&1 \
     && echo "[E2E] screenshot of the failure: ${HOST_TMP}/office-failure.png" >&2
+  docker compose logs --tail=40 nextcloud-nginx nextcloud-php-fpm >&2 || true
   docker rm -f e2e-office-browser >/dev/null 2>&1 || true
   fail "office in the browser failed"
 fi

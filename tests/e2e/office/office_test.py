@@ -56,7 +56,10 @@ with sync_playwright() as playwright:
 
     # the page loads Collabora into an iframe, so its load event can take
     # long; the frame is awaited below
-    page.goto(f'{NC_URL}/index.php/f/{FILE_ID}', wait_until='domcontentloaded', timeout=120_000)
+    try:
+        page.goto(f'{NC_URL}/index.php/f/{FILE_ID}', wait_until='domcontentloaded', timeout=120_000)
+    except Exception as error:
+        fail(page, f'/f/{FILE_ID} delivered no page within 120s: {error}')
     deadline = time.time() + 120
     frame = None
     while frame is None and time.time() < deadline:
