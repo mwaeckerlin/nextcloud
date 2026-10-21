@@ -1,0 +1,9 @@
+# Test overlay: a real browser for the office test. It runs in the network of
+# the host, so it opens Nextcloud under the address a user types, and the
+# e2e script starts it on purpose (profile tools keeps `up` from starting it).
+services:
+  office-browser:
+    build: tests/e2e/office
+    image: mwaeckerlin/nextcloud:office-test
+    profiles: ["tools"]
+    network_mode: host
