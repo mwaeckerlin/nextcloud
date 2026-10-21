@@ -13,6 +13,8 @@ FROM mwaeckerlin/nginx AS production
 ENV CONTAINERNAME "nextcloud-nginx"
 ENV PHP_FPM_HOST "nextcloud-php-fpm"
 ENV WEBROOT ""
+# seconds nginx waits for php-fpm; the variable of the legacy image
+ENV MAX_INPUT_TIME "3600"
 COPY conf/conf.d/websocket.conf    /etc/nginx.template/conf.d/websocket.conf
 COPY conf/server.d/default.conf    /etc/nginx.template/server.d/default.conf
 COPY --from=build /app /app

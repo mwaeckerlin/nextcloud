@@ -112,11 +112,19 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `PHP_FPM_PORT` (default `9000`): upstream FastCGI port.
   - `ROOT` (default `/app`): document root served by NGINX.
   - `WEBROOT`: optional URL prefix such as `/nextcloud`; must match the PHP-FPM `WEBROOT` value.
+  - `MAX_INPUT_TIME` (default `3600`): seconds NGINX waits for php-fpm (`fastcgi_read_timeout`, `fastcgi_send_timeout`); set it to the same value as on `nextcloud-php-fpm`.
 
 - **nextcloud-php-fpm**
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
-  - `HOST`: public hostname (e.g. `cloud.example.com`); default `localhost:8824`, always extends `trusted_domains`, and is used as the base for generated public URLs.
+  - `ADMIN_PWD`: admin password for the first installation; the secret `nextcloud_admin_password` takes precedence. Empty, Nextcloud installs on the first request with a generated password, which stands in the container log.
+  - `HOST`: public hostname (e.g. `cloud.example.com`); always extends `trusted_domains` and is the base for generated public URLs. Empty together with `URL`, it is `localhost:8824`.
+  - `URL`: the same setting as `HOST`, the name of the legacy image; `HOST` takes precedence when both are set.
   - `DOMAIN`: legacy alias for `HOST` (kept for backwards compatibility in startup/runtime fallback logic).
+  - `UPLOAD_MAX_FILESIZE` (default `8G`): largest upload; sets `upload_max_filesize` and `post_max_size` of PHP.
+  - `MEMORY_LIMIT` (default `1000M`): `memory_limit` of PHP; empty, it takes the value of `UPLOAD_MAX_FILESIZE`.
+  - `MAX_INPUT_TIME` (default `3600`): seconds a request may take to arrive and to run; sets `max_input_time` and `max_execution_time` of PHP.
+  - `MAX_REQUEST_WORKERS` (default `100`): most PHP processes at the same time, `pm.max_children` of php-fpm; see [Database connections](#database-connections).
+  - `WAIT_SECONDS_FOR_MYSQL` (default `300`): seconds the first installation retries while the database does not answer; then php-fpm starts without it.
   - `PROTOCOL`: public protocol; default `https`.
   - `SELF_CHECK_URL`: optional override for the generated CLI/self-check URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot` and must match the NGINX `WEBROOT` value.
@@ -124,6 +132,8 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `MYSQL_HOST`: database hostname; default `mysql`, set to `nextcloud-db` in the compose setup.
   - `MYSQL_USER`: database user; default `nextcloud`.
   - `MYSQL_DATABASE`: database name; default `nextcloud`.
+  - `MYSQL_PASSWORD`: database password; the secret `nextcloud_db_password` takes precedence. Empty, Nextcloud installs with SQLite.
+  - `MYSQL_ENV_MYSQL_USER`, `MYSQL_ENV_MYSQL_PASSWORD`, `MYSQL_ENV_MYSQL_DATABASE`: set by a docker link to a container named `mysql`; they take precedence over `MYSQL_USER`, `MYSQL_PASSWORD` and `MYSQL_DATABASE`, as in the legacy image.
   - `OFFICE_WOPI_URL`: internal Collabora endpoint; default `http://collabora:9980`.
   - `OFFICE_PUBLIC_WOPI_URL`: optional override for the public WOPI URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
@@ -135,14 +145,14 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
 
 ### Database connections
 
-Every PHP process holds one database connection while it answers a request and closes it when the request ends. The pool configuration of the base image `mwaeckerlin/php-fpm`, `/etc/php<version>/php-fpm.d/www.conf`, starts at most `pm.max_children = 50` processes, so Nextcloud never opens more than 50 connections for requests, plus one for each running background job. The database accepts `max_connections` connections, 151 by default in MariaDB and MySQL.
+Every PHP process holds one database connection while it answers a request and closes it when the request ends. php-fpm starts at most `MAX_REQUEST_WORKERS` processes, 100 by default, set as `pm.max_children` in `/usr/local/etc/php-fpm.d/zz-nextcloud.conf`, so Nextcloud never opens more than that many connections for requests, plus one for each running background job. The database accepts `max_connections` connections, 151 by default in MariaDB and MySQL.
 
 The two limits work together:
 
-- Requests above `pm.max_children` wait in the queue of `php-fpm` until a process is free; NGINX answers with 504 only after 60 seconds.
+- Requests above `MAX_REQUEST_WORKERS` wait in the queue of `php-fpm` until a process is free; NGINX answers with 504 only after `MAX_INPUT_TIME` seconds.
 - Connections above `max_connections` fail at once, and Nextcloud shows «Too many connections» (error 1040).
 
-So `max_connections` must stay above `pm.max_children` with room for background jobs, backups and administration. Nextcloud gets no root password and never changes the limit of the database. Where the database also serves other clients, its limit is raised as an option of its own server:
+So `max_connections` must stay above `MAX_REQUEST_WORKERS` with room for background jobs, backups and administration. Nextcloud gets no root password and never changes the limit of the database. Where the database also serves other clients, its limit is raised as an option of its own server:
 
 ```yaml
   nextcloud-db:
@@ -151,6 +161,28 @@ So `max_connections` must stay above `pm.max_children` with room for background 
 ```
 
 Every open connection takes memory in the database server, so a higher limit needs the memory for it where the database runs with a memory limit.
+
+### Health check
+
+The image `mwaeckerlin/nextcloud:php-fpm` carries a `HEALTHCHECK`, so Docker Compose and Docker Swarm use it without a `healthcheck` block in the compose file. Every 30 seconds `/usr/local/bin/health.php` sends a FastCGI request for `status.php` to the local php-fpm, the way NGINX does. As in the legacy image, it reports healthy when php-fpm answers and Nextcloud is installed, not in maintenance mode, and needs no database upgrade; otherwise it prints the reason, e.g. `unhealthy: Nextcloud is in maintenance mode`. The image has no shell and no HTTP client, so PHP itself speaks FastCGI.
+
+The timing is that of the legacy image: a start period of 300 seconds, then 240 failed checks in a row, two hours, mark the container unhealthy; Docker Swarm then replaces it. The first healthy check ends the start period. `nextcloud-nginx` waits with `depends_on: condition: service_healthy` until php-fpm is healthy. A `healthcheck` block in the compose file overrides any of the values:
+
+```yaml
+  nextcloud-php-fpm:
+    healthcheck:
+      retries: 480
+```
+
+The result of the last checks stands in `docker inspect --format '{{json .State.Health}}' <container>`.
+
+### Start and background jobs
+
+Every start of an installed Nextcloud runs, as the legacy image does and before php-fpm answers: `maintenance:mode --off`, `upgrade`, `maintenance:repair` (with `--include-expensive` and another `upgrade` when it fails), `db:add-missing-indices`, `db:add-missing-columns`, `db:convert-filecache-bigint`, `db:convert-mysql-charset`, `db:add-missing-primary-keys`, and it reinstalls an app in `custom_apps` that an update left nested in itself. A new image of the next major version therefore upgrades the installation when it starts.
+
+The paths of the legacy image lead to the same place: `/var/www/nextcloud` is a link to `/app`, so the `datadirectory` `/var/www/nextcloud/data` in a `config.php` of the legacy image and a volume mounted at `/var/www/nextcloud/data` or `/var/www/nextcloud/config` work unchanged. The `apps` volume of the legacy image holds the shipped apps of its old version beside the installed ones; it is mounted at `/app/custom_apps`, because at `/var/www/nextcloud/apps` it would hide the shipped apps of the new version.
+
+Beside php-fpm, `/usr/local/bin/cron.php` runs `/app/cron.php` every 15 minutes and `occ files:scan --all` once a day; the first run switches Nextcloud's background jobs to cron mode.
 
 
 ## Docker Compose Setup
@@ -245,10 +277,14 @@ services:
     image: mwaeckerlin/nextcloud:nginx
     environment:
       WEBROOT:
+      MAX_INPUT_TIME: 3600
     ports:
       - "8824:8080"
     volumes:
       - nc-apps:/app/custom_apps:ro
+    depends_on:
+      nextcloud-php-fpm:
+        condition: service_healthy
     networks:
       - php-network
       - collabora-network
@@ -260,6 +296,9 @@ services:
       PROTOCOL: http
       WEBROOT:
       ADMIN_USER: admin
+      UPLOAD_MAX_FILESIZE: 8G
+      MAX_INPUT_TIME: 3600
+      MEMORY_LIMIT: 1000M
       MYSQL_HOST: nextcloud-db
       MYSQL_USER: nextcloud
       MYSQL_DATABASE: nextcloud

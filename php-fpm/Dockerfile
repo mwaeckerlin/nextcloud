@@ -10,11 +10,22 @@ RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN mkdir -p data
 USER root
 RUN ${ALLOW_USER} data
+# the paths of the legacy image: its config.php names /var/www/nextcloud/data,
+# and its compose files mount the volumes below /var/www/nextcloud
+RUN mkdir -p /legacy/var/www && ln -s /app /legacy/var/www/nextcloud
 
 FROM mwaeckerlin/php-fpm AS production
+# the variables of the legacy image, with its names and defaults
+ENV MEMORY_LIMIT "1000M"
+ENV UPLOAD_MAX_FILESIZE "8G"
+ENV MAX_INPUT_TIME "3600"
+ENV MAX_REQUEST_WORKERS "100"
+ENV WAIT_SECONDS_FOR_MYSQL "300"
 ENV ADMIN_USER "admin"
 ENV ADMIN_PWD ""
-ENV HOST "localhost:8824"
+# HOST and URL are the same setting, HOST wins; empty both means localhost:8824
+ENV HOST ""
+ENV URL ""
 ENV PROTOCOL "https"
 ENV WEBROOT ""
 ENV DEBUG "0"
@@ -27,11 +38,21 @@ ENV OFFICE_PUBLIC_WOPI_URL ""
 ENV OFFICE_CALLBACK_URL ""
 ENV OFFICE_WOPI_ALLOWLIST ""
 COPY --from=build /app /app
+COPY --from=build /legacy/var/www /var/www
 COPY autoconfig.php /app/config/autoconfig.php
 COPY autoconfig.php /usr/local/share/nextcloud/autoconfig.php
 COPY custom.config.php /app/config/custom.config.php
 COPY custom.config.php /usr/local/share/nextcloud/custom.config.php
 COPY --chmod=755 office-bootstrap.php /usr/local/bin/office-bootstrap.php
+COPY --chmod=644 cron.php /usr/local/bin/cron.php
+COPY --chmod=644 fastcgi.php /usr/local/bin/fastcgi.php
+COPY --chmod=644 health.php /usr/local/bin/health.php
+COPY --chmod=644 zz-nextcloud.conf /usr/local/etc/php-fpm.d/zz-nextcloud.conf
 ENTRYPOINT ["/usr/bin/php", "/usr/local/bin/office-bootstrap.php"]
+# Healthy once php-fpm answers status.php, Nextcloud is installed, not in
+# maintenance mode and needs no database upgrade; the timing of the legacy
+# image. A compose healthcheck block overrides any of these values.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=240 \
+    CMD ["/usr/bin/php", "/usr/local/bin/health.php"]
 
 FROM production

@@ -23,6 +23,13 @@ function getSecretOrEnv(string $envName, string $secretFile): string
     return '';
 }
 
+// An empty variable takes the default, as in the legacy image.
+function envOrDefault(string $envName, string $default): string
+{
+    $value = trim((string) getenv($envName));
+    return $value !== '' ? $value : $default;
+}
+
 function runOcc(array $args): array
 {
     $cmd = array_merge(['php', '/app/occ'], $args);
@@ -162,10 +169,12 @@ function installNextcloudIfNeeded(): void
 
     $adminUser = getenv('ADMIN_USER') ?: 'admin';
     $adminPass = getSecretOrEnv('ADMIN_PWD', '/run/secrets/nextcloud_admin_password');
+    // MYSQL_ENV_MYSQL_* are the variables of a docker link to a container
+    // named mysql, read by the legacy image before MYSQL_*
     $dbHost = getenv('MYSQL_HOST') ?: 'mysql';
-    $dbName = getenv('MYSQL_DATABASE') ?: 'nextcloud';
-    $dbUser = getenv('MYSQL_USER') ?: 'nextcloud';
-    $dbPass = getSecretOrEnv('MYSQL_PASSWORD', '/run/secrets/nextcloud_db_password');
+    $dbName = getenv('MYSQL_ENV_MYSQL_DATABASE') ?: (getenv('MYSQL_DATABASE') ?: 'nextcloud');
+    $dbUser = getenv('MYSQL_ENV_MYSQL_USER') ?: (getenv('MYSQL_USER') ?: 'nextcloud');
+    $dbPass = getenv('MYSQL_ENV_MYSQL_PASSWORD') ?: getSecretOrEnv('MYSQL_PASSWORD', '/run/secrets/nextcloud_db_password');
     $dataDir = '/app/data';
 
     if ($adminPass === '' || $dbPass === '') {
@@ -173,9 +182,12 @@ function installNextcloudIfNeeded(): void
         return;
     }
 
-    logMessage('Nextcloud not installed yet, starting unattended installation');
+    // the database may still be starting: retry for WAIT_SECONDS_FOR_MYSQL
+    $waitSeconds = (int) envOrDefault('WAIT_SECONDS_FOR_MYSQL', '300');
+    $deadline = time() + $waitSeconds;
+    logMessage("Nextcloud not installed yet, starting unattended installation, waiting up to {$waitSeconds}s for the database");
 
-    for ($i = 0; $i < 60; $i++) {
+    while (true) {
         [$code, $stdout, $stderr] = runOcc([
             'maintenance:install',
             '--database=mysql',
@@ -190,7 +202,9 @@ function installNextcloudIfNeeded(): void
             '--no-ansi',
         ]);
 
-        if ($code === 0 || isInstalled()) {
+        // occ maintenance:install exits 0 also when the database refused the
+        // connection, so only `occ status` tells whether it worked
+        if (isInstalled()) {
             logMessage('Unattended installation completed');
             return;
         }
@@ -199,10 +213,59 @@ function installNextcloudIfNeeded(): void
         if ($combined !== '') {
             logMessage('Install retry: ' . preg_replace('/\s+/', ' ', $combined));
         }
+        if (time() + 5 > $deadline) {
+            break;
+        }
         usleep(5_000_000);
     }
 
     logMessage('Installation did not complete within retry window');
+}
+
+function logOcc(string $step, array $args): int
+{
+    [$code, $stdout, $stderr] = runOcc(array_merge($args, ['--no-interaction', '--no-ansi']));
+    logMessage("{$step} returned {$code}" . ($code !== 0 ? ' output: ' . preg_replace('/\s+/', ' ', trim($stdout . ' ' . $stderr)) : ''));
+    return $code;
+}
+
+function removeTree(string $path): void
+{
+    if (is_dir($path) && !is_link($path)) {
+        foreach (listVisibleEntries($path) as $entry) {
+            removeTree($path . '/' . $entry);
+        }
+        rmdir($path);
+        return;
+    }
+    unlink($path);
+}
+
+// On every start of an installed Nextcloud, as the legacy image does: leave
+// maintenance mode, upgrade, repair, complete the database, reinstall apps
+// that an update left nested in themselves.
+function upgradeNextcloud(): void
+{
+    logMessage('Upgrading and repairing the installation');
+    logOcc('maintenance:mode --off', ['maintenance:mode', '--off']);
+    logOcc('upgrade', ['upgrade']);
+    if (logOcc('maintenance:repair', ['maintenance:repair']) !== 0
+        && logOcc('maintenance:repair --include-expensive', ['maintenance:repair', '--include-expensive']) !== 0) {
+        logOcc('upgrade', ['upgrade']);
+    }
+    logOcc('db:add-missing-indices', ['db:add-missing-indices']);
+    logOcc('db:add-missing-columns', ['db:add-missing-columns']);
+    logOcc('db:convert-filecache-bigint', ['db:convert-filecache-bigint']);
+    logOcc('db:convert-mysql-charset', ['db:convert-mysql-charset']);
+    logOcc('db:add-missing-primary-keys', ['db:add-missing-primary-keys']);
+    foreach (listVisibleEntries('/app/custom_apps') as $app) {
+        if (is_dir("/app/custom_apps/{$app}/{$app}")) {
+            logMessage("Reinstalling broken app {$app}");
+            removeTree("/app/custom_apps/{$app}");
+            logOcc("app:install {$app}", ['app:install', $app]);
+        }
+    }
+    logOcc('maintenance:mode --off', ['maintenance:mode', '--off']);
 }
 
 function appendWebroot(string $url, string $webroot): string
@@ -232,6 +295,12 @@ function resolvePublicHost(): string
     $host = trim((string) (getenv('HOST') ?: ''));
     if ($host !== '') {
         return $host;
+    }
+
+    // URL is the same setting as HOST, as in the legacy image
+    $url = trim((string) (getenv('URL') ?: ''));
+    if ($url !== '') {
+        return $url;
     }
 
     // Backward-compatible alias for older compose setups.
@@ -352,8 +421,28 @@ function applyOfficeConfig(): void
 ensureAutoconfig();
 seedCustomAppsIfEmpty();
 ensureRuntimeConfig();
-installNextcloudIfNeeded();
+if (isInstalled()) {
+    upgradeNextcloud();
+} else {
+    installNextcloudIfNeeded();
+}
 applyOfficeConfig();
+
+// The background jobs of the legacy image: cron.php every 15 minutes and a
+// daily file scan, in a process of its own beside php-fpm.
+$cron = proc_open(['/usr/bin/php', '/usr/local/bin/cron.php'], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $cronPipes);
+if (!is_resource($cron)) {
+    logMessage('Failed to start the background jobs');
+}
+
+// The PHP limits of the legacy image: UPLOAD_MAX_FILESIZE bounds uploads and
+// POST bodies, MAX_INPUT_TIME the time to read and run a request, and
+// MEMORY_LIMIT falls back to UPLOAD_MAX_FILESIZE when empty.
+$uploadMaxFilesize = envOrDefault('UPLOAD_MAX_FILESIZE', '8G');
+$maxInputTime = envOrDefault('MAX_INPUT_TIME', '3600');
+$memoryLimit = envOrDefault('MEMORY_LIMIT', $uploadMaxFilesize);
+// zz-nextcloud.conf reads it; php-fpm refuses to start on an empty value
+putenv('MAX_REQUEST_WORKERS=' . envOrDefault('MAX_REQUEST_WORKERS', '100'));
 
 // No shell fallback: run php-fpm directly as a process.
 $proc = proc_open([
@@ -361,6 +450,11 @@ $proc = proc_open([
     '-F',
     '-R',
     '-O',
+    '-d', 'upload_max_filesize=' . $uploadMaxFilesize,
+    '-d', 'post_max_size=' . $uploadMaxFilesize,
+    '-d', 'memory_limit=' . $memoryLimit,
+    '-d', 'max_input_time=' . $maxInputTime,
+    '-d', 'max_execution_time=' . $maxInputTime,
 ], [
     0 => STDIN,
     1 => STDOUT,

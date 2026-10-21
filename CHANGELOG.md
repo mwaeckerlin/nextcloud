@@ -1,5 +1,13 @@
 # Changelog
 
+- 2026-10-21 **1.1.6**
+    - The images `nginx` and `php-fpm` take the variables of the legacy image again, with the same names and defaults: `UPLOAD_MAX_FILESIZE` (8G), `MEMORY_LIMIT` (1000M), `MAX_INPUT_TIME` (3600, also the timeout of `nginx`), `MAX_REQUEST_WORKERS` (100), `WAIT_SECONDS_FOR_MYSQL` (300), `URL` beside `HOST`, and `MYSQL_ENV_MYSQL_*`. `HOST` is empty by default, so `URL` takes effect.
+    - The image `php-fpm` reports its health to Docker without any configuration, as the legacy image does: healthy once it answers requests, Nextcloud is installed, not in maintenance mode and needs no database upgrade. `nginx` starts only once `php-fpm` is healthy.
+    - At most 100 PHP processes run at the same time by default, up from 50.
+    - Every start of the image `php-fpm` upgrades and repairs an installed Nextcloud, as the legacy image does, and background jobs run by cron every 15 minutes with a daily file scan.
+    - `/var/www/nextcloud`, the directory of the legacy image, leads to `/app`, so a `config.php` and the `data` and `config` volumes of the legacy image keep their paths.
+    - The unattended installation waits for the database: a refused connection no longer counts as a completed installation.
+
 - 2026-10-21 **1.1.5**
     - The WebSocket example of the documentation names a neutral app `myapp`
 
