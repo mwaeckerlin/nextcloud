@@ -140,7 +140,7 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
   - `APPSTORE_TIMEOUT`: app-store fetch timeout in seconds for installing `richdocuments`; default `600` (the ~12 MB store index aborts at Nextcloud's 120 s default on slow connections).
   - `MAIL_FROM_ADDRESS` (default `nextcloud`) and `MAIL_DOMAIN` (default: `HOST` without port): the sender of mails, `mail_from_address@mail_domain`.
-  - `LOGLEVEL`: Nextcloud log level, `0` debug to `4` fatal; unset, the level saved under Administration settings applies, otherwise `2`.
+  - `LOGLEVEL`: Nextcloud log level, `0` debug to `4` fatal; set, it overrides a level saved in `config.php`, e.g. a debug level `0` an earlier installation left there; unset, the saved level applies, otherwise `2`. Nextcloud logs to the container log only (`log_type` `errorlog`, `logfile` `/proc/self/fd/2`), never to a file in a volume, so `docker logs` shows it and Docker rotates it.
   - `MAIL_SMTPHOST`, `MAIL_SMTPPORT`, `MAIL_SMTPSECURE`, `MAIL_SMTPNAME`, `MAIL_SMTPPASSWORD`: an external mail server; see [Mail server](#mail-server).
   - `NC_<key>`: Nextcloud itself reads every setting of `config.php` from a variable of that name, e.g. `NC_mail_smtpauthtype`; such a variable takes precedence over every config file.
 
@@ -204,14 +204,14 @@ Every open connection takes memory in the database server, so a higher limit nee
 
 ### Health check
 
-The image `mwaeckerlin/nextcloud:php-fpm` carries a `HEALTHCHECK`, so Docker Compose and Docker Swarm use it without a `healthcheck` block in the compose file. Every 30 seconds `/usr/local/bin/health.php` sends a FastCGI request for `status.php` to the local php-fpm, the way NGINX does. As in the legacy image, it reports healthy when php-fpm answers and Nextcloud is installed, not in maintenance mode, and needs no database upgrade; otherwise it prints the reason, e.g. `unhealthy: Nextcloud is in maintenance mode`. The image has no shell and no HTTP client, so PHP itself speaks FastCGI, through `/usr/local/bin/fastcgi.php` of the base image `mwaeckerlin/php-fpm`; this check replaces the ping check of that base image.
+The image `mwaeckerlin/nextcloud:php-fpm` carries a `HEALTHCHECK`, so Docker Compose and Docker Swarm use it without a `healthcheck` block in the compose file. Every 10 seconds `/usr/local/bin/health.php` sends a FastCGI request for `status.php` to the local php-fpm, the way NGINX does. As in the legacy image, it reports healthy when php-fpm answers and Nextcloud is installed, not in maintenance mode, and needs no database upgrade; otherwise it prints the reason, e.g. `unhealthy: Nextcloud is in maintenance mode`. The image has no shell and no HTTP client, so PHP itself speaks FastCGI, through `/usr/local/bin/fastcgi.php` of the base image `mwaeckerlin/php-fpm`; this check replaces the ping check of that base image.
 
-The timing is that of the legacy image: a start period of 300 seconds, then 240 failed checks in a row, two hours, mark the container unhealthy; Docker Swarm then replaces it. The first healthy check ends the start period. `nextcloud-nginx` waits with `depends_on: condition: service_healthy` until php-fpm is healthy. A `healthcheck` block in the compose file overrides any of the values:
+The start period is 60 minutes, one and a half times an upgrade of 40 minutes, so Docker Swarm does not replace a task in the middle of a long upgrade. During the start period the check runs every 5 seconds, so a start without upgrade is healthy within seconds; checks that fail during it do not count, and the first healthy check ends it. The interval of 5 seconds needs Docker 25 or newer; an older Docker checks every 10 seconds from the start. After the start period, six failed checks in a row, one minute, mark the container unhealthy, and Docker Swarm then replaces it. A check without an answer within 5 seconds counts as failed; a php-fpm that answers at all answers within that time, and a single slow answer under load leaves the container healthy. The start logs every step with its duration, so the log of an upgrade shows how long it took. `nextcloud-nginx` waits with `depends_on: condition: service_healthy` until php-fpm is healthy. A `healthcheck` block in the compose file overrides any of the values:
 
 ```yaml
   nextcloud-php-fpm:
     healthcheck:
-      retries: 480
+      start_period: 120m
 ```
 
 The result of the last checks stands in `docker inspect --format '{{json .State.Health}}' <container>`.
@@ -229,7 +229,7 @@ The check stays active: `occ integrity:check-core` and `occ integrity:check-app 
 
 ### Start and background jobs
 
-Every start of an installed Nextcloud runs, as the legacy image does and before php-fpm answers: `maintenance:mode --off`, `upgrade`, `maintenance:repair` (with `--include-expensive` and another `upgrade` when it fails), `db:add-missing-indices`, `db:add-missing-columns`, `db:convert-filecache-bigint`, `db:convert-mysql-charset`, `db:add-missing-primary-keys`, and it reinstalls an app in `custom_apps` that an update left nested in itself. A new image of the next major version therefore upgrades the installation when it starts.
+The start first waits up to `WAIT_SECONDS_FOR_MYSQL` until `occ status` answers, logging every attempt, and only then decides between installation and upgrade. Every step is logged when it begins, with the output of `occ` as it comes, and with its result and duration when it ends. Every start of an installed Nextcloud runs, as the legacy image does and before php-fpm answers: `maintenance:mode --off`, `upgrade`, `maintenance:repair` (with `--include-expensive` and another `upgrade` when it fails), `db:add-missing-indices`, `db:add-missing-columns`, `db:convert-filecache-bigint`, `db:convert-mysql-charset`, `db:add-missing-primary-keys`, and it reinstalls an app in `custom_apps` that an update left nested in itself. A new image of the next major version therefore upgrades the installation when it starts.
 
 The paths of the legacy image lead to the same place: `/var/www/nextcloud` is a link to `/app`, so the `datadirectory` `/var/www/nextcloud/data` in a `config.php` of the legacy image and a volume mounted at `/var/www/nextcloud/data` or `/var/www/nextcloud/config` work unchanged. The `apps` volume of the legacy image holds the shipped apps of its old version beside the installed ones; it is mounted at `/app/custom_apps`, because at `/var/www/nextcloud/apps` it would hide the shipped apps of the new version.
 

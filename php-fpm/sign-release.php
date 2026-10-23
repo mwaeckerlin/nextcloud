@@ -70,11 +70,12 @@ $nextcloudCa = file_get_contents($rootCrt) ?: fail("cannot read {$rootCrt}");
 file_put_contents($rootCrt, rtrim($nextcloudCa) . "\n" . $caPem) || fail("cannot write {$rootCrt}");
 
 // occ runs only for the owner of config/config.php; the config folder is not
-// part of any signature
+// part of any signature. The log goes to stderr: the default file logger of
+// occ creates data/nextcloud.log, which every new data volume would inherit.
 $config = $root . '/config/config.php';
 $hadConfig = is_file($config);
 if (!$hadConfig) {
-    file_put_contents($config, "<?php\n\$CONFIG = [];\n") || fail("cannot write {$config}");
+    file_put_contents($config, "<?php\n\$CONFIG = ['log_type' => 'errorlog'];\n") || fail("cannot write {$config}");
 }
 
 $key = '--privateKey=' . $work . '/core.key';

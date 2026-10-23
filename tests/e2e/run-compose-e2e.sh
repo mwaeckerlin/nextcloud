@@ -70,8 +70,7 @@ docker compose up -d --build --force-recreate --remove-orphans >/dev/null
 echo "[E2E] Waiting until Nextcloud is installed"
 deadline=$(( $(date +%s) + 600 ))
 while :; do
-  if docker compose exec -T nextcloud-php-fpm php /app/occ status --no-ansi 2>/dev/null \
-       | grep -q 'installed: true'; then
+  if grep -q 'installed: true' <<<"$(docker compose exec -T nextcloud-php-fpm php /app/occ status --no-ansi 2>/dev/null || true)"; then
     break
   fi
   if (( $(date +%s) > deadline )); then
@@ -106,7 +105,7 @@ for expected in '"upload_max_filesize":"20G"' '"post_max_size":"20G"' '"memory_l
                 '"max_input_time":"7200"' '"max_execution_time":"7200"'; do
   grep -qF "$expected" <<<"$LIMITS" || fail "php-fpm worker lacks $expected: $LIMITS"
 done
-docker compose exec -T nextcloud-nginx nginx -T 2>/dev/null | grep -q 'fastcgi_read_timeout 7200s' \
+grep -q 'fastcgi_read_timeout 7200s' <<<"$(docker compose exec -T nextcloud-nginx nginx -T 2>/dev/null)" \
   || fail "nginx does not wait 7200s for php-fpm (fastcgi_read_timeout)"
 
 # --- URL is the older name of HOST and still sets the public host --------
@@ -197,8 +196,112 @@ while :; do
   (( $(date +%s) > deadline )) && fail "nextcloud-php-fpm not healthy after restart in maintenance mode (status: '$HEALTH')"
   sleep 5
 done
-docker compose logs nextcloud-php-fpm | grep -q 'Upgrading and repairing the installation' \
+# the whole log first: grep -q stops at the first hit, and the writer of a
+# long log then ends with SIGPIPE, which pipefail reports as a failure
+grep -q 'Upgrading and repairing the installation' <<<"$(docker compose logs nextcloud-php-fpm)" \
   || fail "the start did not upgrade and repair the installation"
+
+# --- The log goes to the container log only: after installation, requests,
+# occ and cron, no nextcloud.log exists in the data or config volume.
+echo "[E2E] Checking that Nextcloud writes no log file"
+LOGFILES=$(docker compose exec -T nextcloud-php-fpm php -r \
+  'echo implode(" ", array_merge(glob("/app/data/*.log") ?: [], glob("/app/config/*.log") ?: []));')
+if [[ -n "$LOGFILES" ]]; then
+  docker compose exec -T nextcloud-php-fpm php -r \
+    'foreach (explode(" ", $argv[1]) as $f) { echo "--- $f ", filesize($f), " bytes, ", date("c", filemtime($f)), "\n", substr(file_get_contents($f), 0, 4000), "\n"; }' "$LOGFILES" || true
+  docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get log_type || true
+  fail "Nextcloud writes log files into its volumes: $LOGFILES"
+fi
+grep -q '"reqId"' <<<"$(docker compose logs nextcloud-php-fpm)" \
+  || fail "the container log carries no log entry of Nextcloud"
+
+# The settings a legacy installation leaves in config.php: a log file in the
+# data volume, no rotation, debug level. Requests, occ and cron.php still log
+# to the container log and write no file.
+echo "[E2E] Checking the log with the saved settings of a legacy installation"
+for setting in "log_type file" "logfile /app/data/nextcloud.log" "log_rotate_size 0 --type=integer" "loglevel 0 --type=integer"; do
+  set -- $setting
+  docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set "$1" --value="$2" ${3:-} --no-warnings --no-ansi >/dev/null
+done
+LOG_LINES_BEFORE=$(docker compose logs nextcloud-php-fpm | grep -c '"reqId"')
+for request in status.php index.php/login remote.php/dav/files/admin/; do
+  curl --silent --max-time 20 -o /dev/null -u "${ADMIN_USER}:${ADMIN_PASS}" \
+    "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT:+/${WEBROOT#/}}/${request}" \
+    || fail "request ${request} through nginx failed"
+done
+docker compose exec -T nextcloud-php-fpm php /app/occ status --no-warnings --no-ansi >/dev/null
+docker compose exec -T nextcloud-php-fpm php -f /app/cron.php >/dev/null 2>&1 || true
+LOGFILES=$(docker compose exec -T nextcloud-php-fpm php -r \
+  'echo implode(" ", array_merge(glob("/app/data/*.log") ?: [], glob("/app/config/*.log") ?: []));')
+[[ -z "$LOGFILES" ]] || fail "the saved log settings of a legacy installation create log files: $LOGFILES"
+LOG_LINES_AFTER=$(docker compose logs nextcloud-php-fpm | grep -c '"reqId"')
+(( LOG_LINES_AFTER > LOG_LINES_BEFORE )) || fail "with debug level, nothing reached the container log"
+
+# LOGLEVEL overrides a saved level; unset, the saved level applies; with
+# nothing saved, the image default 2 applies.
+echo "[E2E] Checking LOGLEVEL against a saved level"
+loglevel() {
+  docker compose exec -T "$@" nextcloud-php-fpm php /app/occ config:system:get loglevel --no-warnings --no-ansi | tr -d '\r\n'
+}
+[[ "$(loglevel)" == "0" ]] || fail "the saved loglevel 0 does not apply: '$(loglevel)'"
+[[ "$(loglevel -e LOGLEVEL=3)" == "3" ]] || fail "LOGLEVEL=3 does not override the saved level: '$(loglevel -e LOGLEVEL=3)'"
+for key in loglevel log_type logfile log_rotate_size; do
+  docker compose exec -T nextcloud-php-fpm php /app/occ config:system:delete "$key" --no-warnings --no-ansi >/dev/null
+done
+[[ "$(loglevel)" == "2" ]] || fail "without a saved level the default is not 2: '$(loglevel)'"
+
+# --- A noisy occ: an app that writes 88 KB to stderr on every occ call, as a
+# broken app does, must not stop the start; php-fpm comes back healthy.
+echo "[E2E] Restarting php-fpm with an app that floods the stderr of occ"
+docker compose exec -T nextcloud-php-fpm php -r '
+  $dir = "/app/custom_apps/noisy";
+  @mkdir("$dir/appinfo", 0775, true);
+  @mkdir("$dir/lib/AppInfo", 0775, true);
+  file_put_contents("$dir/appinfo/info.xml", "<?xml version=\"1.0\"?><info><id>noisy</id><name>Noisy</name><summary>e2e</summary><description>e2e</description><version>1.0.0</version><licence>agpl</licence><author>e2e</author><namespace>Noisy</namespace><category>tools</category><dependencies><nextcloud min-version=\"30\" max-version=\"99\"/></dependencies></info>");
+  file_put_contents("$dir/lib/AppInfo/Application.php", "<?php\nnamespace OCA\\Noisy\\AppInfo;\nclass Application extends \\OCP\\AppFramework\\App implements \\OCP\\AppFramework\\Bootstrap\\IBootstrap {\n  public function __construct() { parent::__construct(\"noisy\"); }\n  public function register(\\OCP\\AppFramework\\Bootstrap\\IRegistrationContext \$context): void { if (PHP_SAPI === \"cli\") { fwrite(STDERR, str_repeat(\"noisy e2e stderr line\\n\", 4000)); } }\n  public function boot(\\OCP\\AppFramework\\Bootstrap\\IBootContext \$context): void {}\n}\n");'
+docker compose exec -T nextcloud-php-fpm php /app/occ app:enable noisy --no-ansi >/dev/null 2>&1 \
+  || fail "the noisy test app does not enable"
+docker compose restart nextcloud-php-fpm >/dev/null
+deadline=$(( $(date +%s) + 600 ))
+while :; do
+  HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q nextcloud-php-fpm)")
+  [[ "$HEALTH" == "healthy" ]] && break
+  if (( $(date +%s) > deadline )); then
+    docker compose logs --tail=20 nextcloud-php-fpm >&2 || true
+    fail "nextcloud-php-fpm hangs at the start when occ writes 88 KB to stderr (status: '$HEALTH')"
+  fi
+  sleep 5
+done
+docker compose exec -T nextcloud-php-fpm php /app/occ app:disable noisy --no-ansi >/dev/null 2>&1 || true
+
+# --- A database that comes up only after php-fpm, and holds an older version
+# than the image: the start waits for it, then upgrades, and php-fpm becomes
+# healthy. In a swarm the database and php-fpm start together.
+echo "[E2E] Restarting php-fpm before its database, with an older database version"
+CODE_VERSION=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get version --no-ansi | tr -d '\r\n')
+IFS=. read -r v1 v2 v3 v4 <<<"$CODE_VERSION"
+if (( ${v4:-0} > 0 )); then v4=$((v4 - 1)); else v3=$((v3 - 1)); fi
+OLD_VERSION="$v1.$v2.$v3.${v4:-0}"
+docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set version --value="$OLD_VERSION" --no-ansi >/dev/null
+UPGRADES_BEFORE=$(docker compose logs nextcloud-php-fpm | grep -c 'Upgrading and repairing the installation')
+docker compose stop nextcloud-db >/dev/null
+docker compose restart nextcloud-php-fpm >/dev/null
+sleep 60
+docker compose start nextcloud-db >/dev/null
+deadline=$(( $(date +%s) + 900 ))
+while :; do
+  HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q nextcloud-php-fpm)")
+  [[ "$HEALTH" == "healthy" ]] && break
+  if (( $(date +%s) > deadline )); then
+    docker compose logs --tail=30 nextcloud-php-fpm >&2 || true
+    fail "nextcloud-php-fpm not healthy after a late database with version $OLD_VERSION (status: '$HEALTH')"
+  fi
+  sleep 5
+done
+UPGRADES_AFTER=$(docker compose logs nextcloud-php-fpm | grep -c 'Upgrading and repairing the installation')
+(( UPGRADES_AFTER > UPGRADES_BEFORE )) || fail "the start after the late database did not upgrade"
+NOW_VERSION=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get version --no-ansi | tr -d '\r\n')
+[[ "$NOW_VERSION" == "$CODE_VERSION" ]] || fail "database stays at version $NOW_VERSION, the image carries $CODE_VERSION"
 
 echo "[E2E] Waiting until richdocuments is enabled"
 deadline=$(( $(date +%s) + 300 ))
@@ -244,7 +347,7 @@ CORE_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:che
   || fail "integrity check of core fails: $CORE_CHECK"
 APP_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app --all --no-warnings --output=json 2>&1) \
   || fail "integrity check of the apps fails: $APP_CHECK"
-docker compose exec -T nextcloud-php-fpm php /app/occ app:list --no-warnings --output=json | grep -q '"richdocuments"' \
+grep -q '"richdocuments"' <<<"$(docker compose exec -T nextcloud-php-fpm php /app/occ app:list --no-warnings --output=json)" \
   || fail "richdocuments is not installed, the check of an App Store app proves nothing"
 docker compose exec -T nextcloud-php-fpm php -r '
   $src = "/app/apps/files"; $dst = "/tmp/files-check";
