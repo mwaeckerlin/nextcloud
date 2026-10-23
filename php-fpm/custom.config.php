@@ -81,7 +81,11 @@ $saved = (static function (): array {
 })();
 
 $CONFIG = [
+    // the log goes to the container log only: under the legacy image a file in
+    // the data volume grew without limit, with a debug level saved in config.php
     'log_type' => 'errorlog',
+    'logfile' => '/proc/self/fd/2',
+    'log_rotate_size' => 0,
     'logdateformat' => 'c',
     'debug' => getenv('DEBUG') === '1',
     'overwriteprotocol' => $protocol,

@@ -30,7 +30,10 @@ function envOrDefault(string $envName, string $default): string
     return $value !== '' ? $value : $default;
 }
 
-function runOcc(array $args): array
+// Runs occ and returns [exit code, stdout, stderr]. With $live, every line
+// occ prints goes to the container log the moment it arrives, so a long
+// upgrade shows that it runs.
+function runOcc(array $args, bool $live = false): array
 {
     $cmd = array_merge(['php', '/app/occ'], $args);
     $descriptorSpec = [
@@ -44,19 +47,76 @@ function runOcc(array $args): array
     }
 
     fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    $stderr = stream_get_contents($pipes[2]);
-    fclose($pipes[2]);
+    // fread takes what a pipe holds, also a line without its end, so neither
+    // pipe fills up while the other one is read
+    $output = [1 => '', 2 => ''];
+    $partial = [1 => '', 2 => ''];
+    $open = [1 => $pipes[1], 2 => $pipes[2]];
+    while ($open !== []) {
+        $read = array_values($open);
+        $write = $except = null;
+        if (stream_select($read, $write, $except, null) === false) {
+            break;
+        }
+        foreach ($open as $channel => $pipe) {
+            if (!in_array($pipe, $read, true)) {
+                continue;
+            }
+            $chunk = fread($pipe, 65536);
+            if ($chunk === false || ($chunk === '' && feof($pipe))) {
+                fclose($pipe);
+                unset($open[$channel]);
+                $chunk = "\n";
+            } else {
+                $output[$channel] .= $chunk;
+            }
+            if ($live) {
+                $lines = explode("\n", $partial[$channel] . $chunk);
+                $partial[$channel] = array_pop($lines);
+                foreach ($lines as $line) {
+                    if (trim($line) !== '') {
+                        logMessage('  ' . rtrim($line));
+                    }
+                }
+            }
+        }
+    }
     $code = proc_close($proc);
 
-    return [$code, (string) $stdout, (string) $stderr];
+    return [$code, $output[1], $output[2]];
 }
 
 function isInstalled(): bool
 {
     [, $stdout,] = runOcc(['status', '--no-ansi']);
     return strpos($stdout, 'installed: true') !== false;
+}
+
+// Asks `occ status` until it answers, for at most WAIT_SECONDS_FOR_MYSQL: an
+// installed Nextcloud cannot answer before its database does, and deciding
+// between install and upgrade on that failure skipped the upgrade. Returns
+// true or false once occ answers, null when the database never did.
+function waitForStatus(): ?bool
+{
+    $waitSeconds = (int) envOrDefault('WAIT_SECONDS_FOR_MYSQL', '300');
+    $started = time();
+    while (true) {
+        [, $stdout, $stderr] = runOcc(['status', '--no-ansi', '--no-warnings']);
+        if (strpos($stdout, 'installed: true') !== false) {
+            return true;
+        }
+        if (strpos($stdout, 'installed: false') !== false) {
+            return false;
+        }
+        $waited = time() - $started;
+        $reason = strtok(trim($stdout . "\n" . $stderr), "\n") ?: 'no answer';
+        if ($waited + 5 > $waitSeconds) {
+            logMessage("Nextcloud did not answer within {$waitSeconds}s: {$reason}");
+            return null;
+        }
+        logMessage("Waiting for the database, {$waited}s of {$waitSeconds}s: {$reason}");
+        sleep(5);
+    }
 }
 
 function ensureAutoconfig(): void
@@ -222,10 +282,14 @@ function installNextcloudIfNeeded(): void
     logMessage('Installation did not complete within retry window');
 }
 
+// One step of the start: announced, its occ output shown as it comes, and
+// its result with the time it took.
 function logOcc(string $step, array $args): int
 {
-    [$code, $stdout, $stderr] = runOcc(array_merge($args, ['--no-interaction', '--no-ansi']));
-    logMessage("{$step} returned {$code}" . ($code !== 0 ? ' output: ' . preg_replace('/\s+/', ' ', trim($stdout . ' ' . $stderr)) : ''));
+    logMessage("{$step} …");
+    $started = time();
+    [$code] = runOcc(array_merge($args, ['--no-interaction', '--no-ansi', '--no-warnings']), true);
+    logMessage("{$step} returned {$code} after " . (time() - $started) . 's');
     return $code;
 }
 
@@ -421,10 +485,15 @@ function applyOfficeConfig(): void
 ensureAutoconfig();
 seedCustomAppsIfEmpty();
 ensureRuntimeConfig();
+// The decision waits for the database; after an install the upgrade path
+// runs as well and has nothing to do on a fresh installation.
+if (waitForStatus() !== true) {
+    installNextcloudIfNeeded();
+}
 if (isInstalled()) {
     upgradeNextcloud();
 } else {
-    installNextcloudIfNeeded();
+    logMessage('Nextcloud is not installed, nothing to upgrade');
 }
 applyOfficeConfig();
 
