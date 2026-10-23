@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.6
 FROM mwaeckerlin/build AS build
 ARG SOURCE_FILE="latest-35.tar.bz2"
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE} /tmp/${SOURCE_FILE}
@@ -64,9 +64,14 @@ COPY --chmod=644 health.php /usr/local/bin/health.php
 COPY --chmod=644 zz-nextcloud.conf /usr/local/etc/php-fpm.d/zz-nextcloud.conf
 ENTRYPOINT ["/usr/bin/php", "/usr/local/bin/office-bootstrap.php"]
 # Healthy once php-fpm answers status.php, Nextcloud is installed, not in
-# maintenance mode and needs no database upgrade; the timing of the legacy
-# image. A compose healthcheck block overrides any of these values.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=240 \
+# maintenance mode and needs no database upgrade. The start period covers a
+# long upgrade (about 40 minutes, times 1.5), so a swarm never replaces a task
+# in the middle of it; during it the check runs every 5 seconds, so a quick
+# start is healthy within seconds (start-interval needs dockerfile 1.6 and
+# Docker 25). Afterwards six failed checks in a row, one every 10 seconds,
+# mark the container unhealthy; a php-fpm that answers at all answers within
+# the timeout of 5 seconds. A compose healthcheck block overrides any of these.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60m --start-interval=5s --retries=6 \
     CMD ["/usr/bin/php", "/usr/local/bin/health.php"]
 
 FROM production

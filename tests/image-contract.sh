@@ -72,6 +72,27 @@ for image in "$@"; do
     _no_interpreter "${image}" /bin/busybox busybox ls /
     _no_interpreter "${image}" /usr/bin/perl perl   -e 1
     if [[ "${image}" == *:nginx* ]]; then
+        # nginx starts without php-fpm and collabora: in a swarm their names
+        # reach the DNS only once their tasks run, so nginx resolves them per
+        # request and answers 502 until they are there.
+        alone_net="nc-contract-alone-$$"
+        docker network create "${alone_net}" > /dev/null
+        docker run -d --pull=never --name nc-contract-nginx-alone --network "${alone_net}" "${image}" > /dev/null
+        sleep 5
+        running=$(docker inspect --format '{{.State.Running}}' nc-contract-nginx-alone 2> /dev/null)
+        codes=""
+        for path in /index.php /browser/dist/cool.html /hosting/discovery; do
+            codes+="$(docker run --rm --network "${alone_net}" curlimages/curl:8.10.1 --silent --max-time 10 \
+                --output /dev/null --write-out '%{http_code}' "http://nc-contract-nginx-alone:8080${path}") "
+        done
+        startlog=$(grep -m1 'emerg' <<< "$(docker logs nc-contract-nginx-alone 2>&1)" || true)
+        docker rm -f nc-contract-nginx-alone > /dev/null
+        docker network rm "${alone_net}" > /dev/null
+        if [[ "${running}" == "true" && "${codes}" == "502 502 502 " ]]; then
+            _pass "${image}_starts_without_upstreams"
+        else
+            _fail "${image}_starts_without_upstreams" "running=${running}, answers ${codes}${startlog}"
+        fi
         # The nginx image leaves out what no browser requests: source maps and
         # the sample files of new users. The browser still loads the bundles
         # and both forms of the translations (l10n/<lang>.js, and
@@ -111,6 +132,13 @@ for image in "$@"; do
         else
             _pass "${image}_no_source_maps"
         fi
+        # a new data or config volume takes over what the image holds there,
+        # so a log file of the build would be the start of a growing file
+        if grep -qE ' app/(data|config)/[^/]*\.log$' <<< "${listing}"; then
+            _fail "${image}_no_log_file" "log files in the image: $(grep -oE 'app/(data|config)/[^/]*\.log$' <<< "${listing}" | tr '\n' ' ')"
+        else
+            _pass "${image}_no_log_file"
+        fi
         core_common=$(grep -E ' app/dist/core-common\.js$' <<< "${listing}" | awk '{print $3}')
         if [[ "${core_common}" == "0" ]]; then
             _pass "${image}_empty_browser_files"
@@ -143,6 +171,23 @@ for image in "$@"; do
                 _fail "${image}_max_request_workers_${workers}" "pm.max_children is not ${expected}: '$(grep -E 'pm\.max_children|ERROR' <<< "${pool}")'"
             fi
         done
+        # CVE-2026-109619: the pool of the base image locks the session
+        # upload progress and the fatal error backtraces off, and nothing of
+        # nextcloud turns them back on
+        pool=$(docker run --rm --pull=never --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
+        for flag in session.upload_progress.enabled fatal_error_backtraces; do
+            if grep -Eq "${flag//./\\.}\] = (off|no|0)" <<< "${pool}"; then
+                _pass "${image}_${flag}_locked"
+            else
+                _fail "${image}_${flag}_locked" "the pool does not lock ${flag} off"
+            fi
+        done
+        info=$(docker run --rm --pull=never --entrypoint /usr/sbin/php-fpm "${image}" -i 2>&1)
+        if grep -Eiq 'session\.upload_progress\.enabled( => |</td><td class="v">)(Off|0)' <<< "${info}"; then
+            _pass "${image}_session_upload_progress_off"
+        else
+            _fail "${image}_session_upload_progress_off" "$(grep -i 'session.upload_progress.enabled' <<< "${info}" || echo 'setting not reported')"
+        fi
         # MAX_CHILDREN of the base image does not override MAX_REQUEST_WORKERS:
         # zz-nextcloud.conf is read after www.conf of the base image.
         pool=$(docker run --rm --pull=never -e MAX_CHILDREN=7 --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
@@ -176,7 +221,7 @@ for image in "$@"; do
             -e ADMIN_PWD=x -e WAIT_SECONDS_FOR_MYSQL=5 "${image}")
         waited=""
         for second in $(seq 1 90); do
-            if docker logs "${waiter}" 2>&1 | grep -q 'Installation did not complete within retry window'; then
+            if grep -q 'Installation did not complete within retry window' <<< "$(docker logs "${waiter}" 2>&1)"; then
                 waited=${second}
                 break
             fi
@@ -191,14 +236,18 @@ for image in "$@"; do
         fi
         # The image carries its health check as default, so a stack without a
         # healthcheck block in its compose file gets it too; it runs php
-        # directly, the image has no shell. Timing as in the legacy image.
+        # directly, the image has no shell. A start period of 60 minutes covers
+        # a long upgrade, then six failed checks mark the container unhealthy.
         health=$(docker image inspect --format '{{json .Config.Healthcheck}}' "${image}" 2> /dev/null)
         if grep -q '"Test":\["CMD","/usr/bin/php","/usr/local/bin/health.php"\]' <<< "${health}" \
-            && grep -q '"StartPeriod":300000000000' <<< "${health}" \
-            && grep -q '"Retries":240' <<< "${health}"; then
+            && grep -q '"StartPeriod":3600000000000' <<< "${health}" \
+            && grep -q '"StartInterval":5000000000' <<< "${health}" \
+            && grep -q '"Interval":10000000000' <<< "${health}" \
+            && grep -q '"Timeout":5000000000' <<< "${health}" \
+            && grep -q '"Retries":6' <<< "${health}"; then
             _pass "${image}_healthcheck_default"
         else
-            _fail "${image}_healthcheck_default" "no HEALTHCHECK running /usr/local/bin/health.php with start period 300s and 240 retries: ${health}"
+            _fail "${image}_healthcheck_default" "no HEALTHCHECK running /usr/local/bin/health.php with interval 10s, timeout 5s, start period 60m, start interval 5s and 6 retries: ${health}"
         fi
         # Without a running php-fpm the check must report unhealthy.
         if docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" /usr/local/bin/health.php > /dev/null 2>&1; then

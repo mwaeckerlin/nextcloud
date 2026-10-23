@@ -1,5 +1,13 @@
 # Changelog
 
+- 2026-10-23 **1.1.10**
+    - The image `nginx` starts without `php-fpm` and Collabora and answers 502 until they are there; in a Docker Swarm it died at the start while their names were not yet in the DNS.
+    - The image `php-fpm` waits for the database before it decides between installation and upgrade, so a database that starts together with it no longer skips the upgrade.
+    - The start no longer hangs when an `occ` command writes much to stderr, and it shows every step with the output of `occ` as it comes and the time the step took.
+    - The health check of the image `php-fpm` gives a start of up to 60 minutes, enough for a long upgrade, checks every 5 seconds during it, so a quick start is healthy within seconds, and marks the container unhealthy after six failed checks, one every 10 seconds with a timeout of 5 seconds, instead of the two hours and five minutes of the legacy image.
+    - Nextcloud logs to the container log only, also where a `logfile` of the legacy image stands in `config.php`, and the image no longer carries the empty `data/nextcloud.log` its build left behind, which every new data volume took over; `LOGLEVEL` overrides a saved debug level.
+    - The image `php-fpm` is tested for `session.upload_progress.enabled` and `fatal_error_backtraces` locked off (CVE-2026-109619).
+
 - 2026-10-22 **1.1.9**
     - The image `php-fpm` builds on `mwaeckerlin/php-fpm` 1.2.10, which takes its PHP limits from variables; in this image `UPLOAD_MAX_FILESIZE`, `MAX_INPUT_TIME` and `MAX_REQUEST_WORKERS` keep setting `post_max_size`, `max_execution_time` and `pm.max_children`, as in the legacy image.
 
