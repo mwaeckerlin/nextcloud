@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-24 **1.1.12**
+    - The image test against MySQL 8.4 waits until the server answers over TCP; it went on while the temporary server of the MySQL start answered on its socket only, and failed on the arm64 runner.
+    - The browser test of Collabora skips the onboarding tour that newer releases of Collabora show over the document.
+
 - 2026-10-24 **1.1.11**
     - The images are rebuilt in an hourly check once a parent image or a download changed or the image is a week old, instead of once a week.
     - Tables still in `ROW_FORMAT=COMPACT` from an old installation are converted to `DYNAMIC` once per start, online, beside php-fpm; `occ db:add-missing-indices` runs there once more, because the run of the start left an index of an app missing.
