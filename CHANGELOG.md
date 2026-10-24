@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-24 **1.1.13**
+    - The compose setup and the example run MariaDB 11.8, the newest version Nextcloud 33 to 35 support; the tag `mariadb` without a version now delivers MariaDB 13, about which the admin overview warns.
+
 - 2026-10-24 **1.1.12**
     - The image test against MySQL 8.4 waits until the server answers over TCP; it went on while the temporary server of the MySQL start answered on its socket only, and failed on the arm64 runner.
     - The browser test of Collabora skips the onboarding tour that newer releases of Collabora show over the document.
