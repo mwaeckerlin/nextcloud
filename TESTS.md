@@ -37,9 +37,10 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 
 ## Branch contract
 
-`tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does.
+`tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does, and reads the script `deploy` of `package.json`.
 
 - **F5** `new`, `new-33` to `new-35` and `30` to `35` are built with their suffix; `new-30` to `new-32` and `13` to `29` match no rule and stay frozen.
+- **F6** `deploy` pushes every service of `docker-compose.yml` with `build` and `image`, so the workflow finds each image under its architecture tag when it joins them.
 
 ## Workflow contract
 

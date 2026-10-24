@@ -6,8 +6,10 @@ rule of `branch-tags` matches (shared workflow of mwaeckerlin/scratch, matched
 in full with Python's re.fullmatch). Nextcloud 30 to 32 refuse PHP 8.5, which
 is the only PHP mwaeckerlin/php-fpm carries, so the branches new-30 to new-32
 must stay frozen like 13 to 29; every other version branch must be built.
+The script `deploy` of package.json must push every image the compose file
+builds.
 """
-import json, pathlib, re, sys
+import json, pathlib, re, subprocess, sys
 
 workflow = pathlib.Path(__file__).resolve().parent.parent / '.github' / 'workflows' / 'docker.yml'
 line = next(l for l in workflow.read_text().splitlines() if l.strip().startswith('branch-tags:'))
@@ -34,5 +36,17 @@ for branch in frozen:
     ok = got is None
     failed += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  frozen {branch}" + ('' if ok else f' matches a rule (suffix {got!r})'))
-print(f'==> Branch contract: {len(built) + len(frozen) - failed} passed, {failed} failed')
+# the build job pushes the architecture tags with `npm run deploy`, and the
+# deploy job joins every image of the compose file from them; an image the
+# script leaves out fails there with «<image>-<arch>: not found»
+root = workflow.parent.parent.parent
+config = json.loads(subprocess.run(['docker', 'compose', 'config', '--format', 'json'], cwd=root,
+                                   check=True, capture_output=True, text=True).stdout)
+images = sorted(name for name, service in config['services'].items() if 'build' in service and service.get('image'))
+pushed = json.loads((root / 'package.json').read_text())['scripts']['deploy'].split()
+for name in images:
+    ok = name in pushed
+    failed += not ok
+    print(f"  {'PASS' if ok else 'FAIL'}  deploy pushes {name}")
+print(f'==> Branch contract: {len(built) + len(frozen) + len(images) - failed} passed, {failed} failed')
 sys.exit(1 if failed else 0)
