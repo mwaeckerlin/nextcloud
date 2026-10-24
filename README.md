@@ -209,7 +209,7 @@ So `max_connections` must stay above `MAX_REQUEST_WORKERS` with room for backgro
 
 ```yaml
   nextcloud-db:
-    image: mariadb
+    image: mariadb:11.8
     command: --max-connections=500
 ```
 
@@ -267,6 +267,7 @@ The images settle these checks themselves:
 | High-performance backend | `docker-compose.talk.yml`, see [Talk high-performance backend](#talk-high-performance-backend). |
 | Errors in the log of a fresh installation | The start creates `appdata/theming/global`, without which the background job `MigrateBackgroundImages` of Nextcloud fails once. |
 | Errors in the log, code integrity, memory cache | the log file for `logreader` with `LOG_MAX_SIZE`, the build signs the release again, APCu as local cache. |
+| Database version | The compose setup runs `mariadb:11.8`, the newest MariaDB that Nextcloud 33 to 35 support; the tag `mariadb` without a version delivers MariaDB 13, and the admin overview warns about it. A database outside this stack needs a version Nextcloud supports. |
 | Database configuration (app `serverinfo`) | The compose setup starts MariaDB with `--innodb-log-file-size=256M`; the image default of 96M is below the 128M the check asks for. A database outside this stack needs the same setting. The checks of `serverinfo` that count events wait for 24 hours of uptime of the database. |
 | Login method of the database account | MySQL 8.0 deprecates `mysql_native_password`, 8.4 switches it off by default and 9.0 removes it. `db-auth.php` reads the method of its own account on MySQL and, while it is `mysql_native_password`, writes a line `nextcloud-db-auth: warning: …` into the container log with the `ALTER USER` for that account. Switching the method needs the privilege `CREATE USER`, which Nextcloud does not have, so the administrator of the database runs it; PHP then logs in with `caching_sha2_password` without TLS as well. MariaDB is left as it is. |
 
