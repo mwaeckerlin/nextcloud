@@ -458,6 +458,12 @@ function applyOfficeConfig(): void
     [$code, $stdout, $stderr] = runOcc(['app:enable', 'richdocuments', '--no-ansi']);
     logMessage("app:enable returned {$code}" . ($code !== 0 ? ' output: ' . preg_replace('/\s+/', ' ', trim($stdout . ' ' . $stderr)) : ''));
 
+    // Collabora is the office of the image: a second office app (ONLYOFFICE)
+    // claims the same file types, so a document opens in whichever app wins
+    if (str_contains(runOcc(['app:list', '--enabled', '--output=json', '--no-warnings'])[1], '"onlyoffice"')) {
+        logOcc('app:disable onlyoffice', ['app:disable', 'onlyoffice']);
+    }
+
     [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--callback-url=' . $callbackUrl, '--no-ansi']);
     logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
@@ -470,16 +476,58 @@ function applyOfficeConfig(): void
     [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
     logMessage("public_wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
-    $wopiAllowlist = getenv('OFFICE_WOPI_ALLOWLIST') ?: '';
-    if ($wopiAllowlist !== '') {
-        [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_allowlist', '--value=' . $wopiAllowlist, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
-        logMessage("wopi_allowlist set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
-    } else {
-        [$code, , $stderr] = runOcc(['config:app:delete', 'richdocuments', 'wopi_allowlist', '--error-if-not-exists', '--no-ansi']);
-        logMessage("wopi_allowlist delete returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
-    }
+    // Only Collabora may fetch documents over WOPI. Without an allowlist any
+    // host may, and Nextcloud Office warns; Collabora runs in a network of the
+    // stack, so the private networks of Docker are the default.
+    $wopiAllowlist = getenv('OFFICE_WOPI_ALLOWLIST') ?: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16';
+    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_allowlist', '--value=' . $wopiAllowlist, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    logMessage("wopi_allowlist {$wopiAllowlist} set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     logMessage('Office configuration applied');
+}
+
+// Client Push: where NOTIFY_PUSH_HOST names the push server of the stack
+// (image mwaeckerlin/nextcloud:notify-push), the app notify_push is installed
+// and sends the clients to <public URL>/push, which nginx forwards to that
+// server. NOTIFY_PUSH_ENDPOINT sets another address.
+function applyNotifyPushConfig(): void
+{
+    if (trim((string) getenv('NOTIFY_PUSH_HOST')) === '' || !isInstalled()) {
+        return;
+    }
+    $endpoint = getenv('NOTIFY_PUSH_ENDPOINT') ?: getPublicBaseUrl(trim(getenv('WEBROOT') ?: '', '/')) . '/push';
+    if (!is_dir('/app/custom_apps/notify_push')) {
+        logOcc('app:install notify_push', ['app:install', 'notify_push']);
+    }
+    logOcc('app:enable notify_push', ['app:enable', 'notify_push']);
+    logOcc("notify_push base_endpoint {$endpoint}", ['config:app:set', 'notify_push', 'base_endpoint', '--value=' . $endpoint]);
+}
+
+// Talk high-performance backend: where TALK_SIGNALING_HOST names the signaling
+// server of docker-compose.talk.yml, Talk is installed and the server is
+// registered at <public URL>/standalone-signaling, which nginx forwards to it.
+// TALK_SIGNALING_URL sets another address.
+function applyTalkConfig(): void
+{
+    if (trim((string) getenv('TALK_SIGNALING_HOST')) === '' || !isInstalled()) {
+        return;
+    }
+    $url = getenv('TALK_SIGNALING_URL') ?: getPublicBaseUrl(trim(getenv('WEBROOT') ?: '', '/')) . '/standalone-signaling';
+    if (!is_dir('/app/custom_apps/spreed')) {
+        logOcc('app:install spreed', ['app:install', 'spreed']);
+    }
+    logOcc('app:enable spreed', ['app:enable', 'spreed']);
+    $proc = proc_open(['/usr/bin/php', '/usr/local/bin/talk-signaling.php', $url], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes);
+    if (is_resource($proc)) {
+        proc_close($proc);
+    }
+}
+
+// Nextcloud's log file on to the container log, kept below LOG_MAX_SIZE; it
+// starts first, so the log of the installation and the upgrade arrives too.
+$logFollow = proc_open(['/usr/bin/php', '/usr/local/bin/log-follow.php'], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $logFollowPipes);
+if (!is_resource($logFollow)) {
+    logMessage('Failed to pass nextcloud.log on to the container log');
 }
 
 ensureAutoconfig();
@@ -496,6 +544,15 @@ if (isInstalled()) {
     logMessage('Nextcloud is not installed, nothing to upgrade');
 }
 applyOfficeConfig();
+applyNotifyPushConfig();
+applyTalkConfig();
+if (isInstalled()) {
+    // before the first background job, see theming-appdata.php
+    $theming = proc_open(['/usr/bin/php', '/usr/local/bin/theming-appdata.php'], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $themingPipes);
+    if (is_resource($theming)) {
+        proc_close($theming);
+    }
+}
 
 // The background jobs of the legacy image: cron.php every 15 minutes and a
 // daily file scan, in a process of its own beside php-fpm.

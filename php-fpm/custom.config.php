@@ -81,10 +81,12 @@ $saved = (static function (): array {
 })();
 
 $CONFIG = [
-    // the log goes to the container log only: under the legacy image a file in
-    // the data volume grew without limit, with a debug level saved in config.php
-    'log_type' => 'errorlog',
-    'logfile' => '/proc/self/fd/2',
+    // under the legacy image the log file in the data volume grew without
+    // limit, with a debug level saved in config.php: the file stays for the
+    // app logreader, log-follow.php passes it on to the container log and
+    // empties it at LOG_MAX_SIZE, so Nextcloud's own rotation is off
+    'log_type' => 'file',
+    'logfile' => '/app/data/nextcloud.log',
     'log_rotate_size' => 0,
     'logdateformat' => 'c',
     'debug' => getenv('DEBUG') === '1',
@@ -149,8 +151,46 @@ if ($smtpPassword !== '') {
     $CONFIG['mail_smtppassword'] = $smtpPassword;
 }
 
-if ($serverId = getenv('SERVER_ID')) {
-    $CONFIG['server_id'] = $serverId;
+// Behind a reverse proxy Nextcloud reads the client address from
+// X-Forwarded-For only when the request comes from a trusted proxy. Docker
+// creates its networks in the private ranges, so these are the default; a
+// container in them could claim another client address, and so could a client
+// that reaches nginx directly through the routing mesh of a swarm or
+// docker-proxy, which hand it a private address (README, TRUSTED_PROXIES).
+// TRUSTED_PROXIES takes precedence over a saved list, the default fills in
+// where nothing is saved.
+$trustedProxies = getenv('TRUSTED_PROXIES');
+if (is_string($trustedProxies) && trim($trustedProxies) !== '') {
+    $CONFIG['trusted_proxies'] = preg_split('/[\s,]+/', trim($trustedProxies));
+} elseif (!array_key_exists('trusted_proxies', $saved)) {
+    $CONFIG['trusted_proxies'] = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
+}
+if (!array_key_exists('forwarded_for_headers', $saved)) {
+    $CONFIG['forwarded_for_headers'] = ['HTTP_X_FORWARDED_FOR'];
+}
+
+// Nextcloud names the server in the IDs it generates, 0 to 511, so every
+// php-fpm that serves the same database needs its own; without SERVER_ID each
+// container derives one from its host name, which differs per swarm replica.
+$serverId = getenv('SERVER_ID');
+$CONFIG['serverid'] = is_string($serverId) && $serverId !== ''
+    ? (int) $serverId
+    : crc32((string) gethostname()) % 512;
+
+// Redis locks files and holds the cache all php-fpm containers share, where
+// REDIS_HOST names a server; without it Nextcloud locks files in the database,
+// which the admin overview reports. The password comes from a Docker secret.
+$redisHost = (string) getenv('REDIS_HOST');
+if ($redisHost !== '' && class_exists('Redis')) {
+    $CONFIG['memcache.distributed'] = '\\OC\\Memcache\\Redis';
+    $CONFIG['memcache.locking'] = '\\OC\\Memcache\\Redis';
+    $CONFIG['redis'] = ['host' => $redisHost, 'port' => (int) (getenv('REDIS_PORT') ?: 6379)];
+    $redisPassword = is_readable('/run/secrets/nextcloud_redis_password')
+        ? trim((string) file_get_contents('/run/secrets/nextcloud_redis_password'))
+        : (string) getenv('REDIS_PASSWORD');
+    if ($redisPassword !== '') {
+        $CONFIG['redis']['password'] = $redisPassword;
+    }
 }
 
 if (function_exists('apcu_enabled') && apcu_enabled()) {
@@ -167,6 +207,9 @@ if ($host !== '') {
         $hostNoPort,
         'localhost',
         'nextcloud-nginx',
+        // the setup checks of the admin overview reach nginx under this name
+        // where the public URL is not reachable from inside the container
+        'nextcloud-nginx:8080',
         'nextcloud-nextcloud-nginx-1',
     ]));
 

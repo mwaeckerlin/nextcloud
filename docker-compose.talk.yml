@@ -1,0 +1,50 @@
+# Talk high-performance backend, beside docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.talk.yml up
+# The signaling server of struktur AG and NATS, its message bus. nginx forwards
+# /standalone-signaling/ to the signaling server, and the start of
+# nextcloud-php-fpm installs Talk and registers the server with the secret
+# nextcloud_signaling_secret. The whole configuration of the signaling server,
+# its secrets included, is the secret talk_signaling_config; the README shows
+# its content.
+services:
+  nextcloud-nginx:
+    networks:
+      - nginx-signaling
+
+  nextcloud-php-fpm:
+    environment:
+      TALK_SIGNALING_HOST: signaling
+      TALK_SIGNALING_URL: ${TALK_SIGNALING_URL:-}
+    secrets:
+      - nextcloud_signaling_secret
+
+  signaling:
+    image: strukturag/nextcloud-spreed-signaling
+    environment:
+      CONFIG: /run/secrets/talk_signaling_config
+    secrets:
+      - talk_signaling_config
+    depends_on:
+      - nats
+    networks:
+      - nginx-signaling
+      - signaling-nats
+
+  nats:
+    image: nats
+    networks:
+      - signaling-nats
+
+secrets:
+  nextcloud_signaling_secret:
+    environment: NEXTCLOUD_SIGNALING_SECRET
+  talk_signaling_config:
+    environment: TALK_SIGNALING_CONFIG
+
+networks:
+  nginx-signaling:
+    driver_opts:
+      encrypted: 1
+  signaling-nats:
+    driver_opts:
+      encrypted: 1
