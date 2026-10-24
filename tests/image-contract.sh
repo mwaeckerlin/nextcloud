@@ -277,11 +277,15 @@ for image in "$@"; do
         docker run -d --name nc-contract-mysql --network "${mysql_net}" \
             -e MYSQL_ROOT_PASSWORD=contract-root -e MYSQL_DATABASE=nextcloud \
             mysql:8.4 --mysql-native-password=ON > /dev/null
+        # over TCP: the entrypoint of the image first runs a temporary server
+        # without networking that answers on the socket, then restarts it; a
+        # check over the socket passed during that phase, and on the arm64
+        # runner db-auth.php then met a refused connection
         for second in $(seq 1 180); do
-            docker exec nc-contract-mysql mysql -uroot -pcontract-root -e 'SELECT 1' > /dev/null 2>&1 && break
+            docker exec nc-contract-mysql mysql --protocol=tcp -h127.0.0.1 -uroot -pcontract-root -e 'SELECT 1' > /dev/null 2>&1 && break
             sleep 1
         done
-        docker exec nc-contract-mysql mysql -uroot -pcontract-root -e \
+        docker exec nc-contract-mysql mysql --protocol=tcp -h127.0.0.1 -uroot -pcontract-root -e \
             "CREATE USER 'nextcloud'@'%' IDENTIFIED WITH mysql_native_password BY 'contract-pw'; GRANT ALL ON nextcloud.* TO 'nextcloud'@'%';" > /dev/null 2>&1
         auth_config=$(mktemp)
         printf '<?php\n$CONFIG = ["dbtype" => "mysql", "dbhost" => "nc-contract-mysql", "dbname" => "nextcloud", "dbuser" => "nextcloud", "dbpassword" => "contract-pw"];\n' > "${auth_config}"

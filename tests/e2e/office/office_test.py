@@ -83,6 +83,13 @@ with sync_playwright() as playwright:
         frame.wait_for_selector('.iframe-welcome-wrap', state='detached', timeout=5_000)
     except Exception:
         frame.evaluate("document.querySelectorAll('.iframe-welcome-wrap').forEach(e => e.remove())")
+    # newer releases show an onboarding tour instead, whose overlay takes every
+    # click on the document until the user presses «Skip»
+    try:
+        frame.click('#onboarding-skip-button', timeout=15_000)
+        frame.wait_for_selector('#modal-dialog-onboarding-tour-overlay', state='detached', timeout=10_000)
+    except Exception:
+        pass
     page.wait_for_timeout(2000)
     canvas.click()
     page.keyboard.type(TEXT, delay=50)
