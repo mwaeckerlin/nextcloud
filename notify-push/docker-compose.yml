@@ -1,0 +1,4 @@
+services:
+  notify-push:
+    build: .
+    image: mwaeckerlin/nextcloud:notify-push

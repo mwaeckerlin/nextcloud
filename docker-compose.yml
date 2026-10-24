@@ -16,6 +16,7 @@ services:
     networks:
       - nxinx-php
       - nginx-collabora
+      - nginx-push
 
   nextcloud-php-fpm:
     extends:
@@ -29,6 +30,10 @@ services:
       MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
       MEMORY_LIMIT: ${MEMORY_LIMIT:-1000M}
       MYSQL_HOST: nextcloud-db
+      REDIS_HOST: redis
+      LOG_MAX_SIZE: ${LOG_MAX_SIZE:-100M}
+      NOTIFY_PUSH_HOST: notify-push
+      NOTIFY_PUSH_ENDPOINT: ${NOTIFY_PUSH_ENDPOINT:-}
     secrets:
       - nextcloud_db_password
       - nextcloud_admin_password
@@ -41,11 +46,42 @@ services:
         condition: service_started
       collabora:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - nxinx-php
       - php-db
       - php-smtp
       - php-collabora
+      - php-redis
+
+  # Client Push: reads the database from config.php of the config volume,
+  # talks to Redis, and checks its clients against Nextcloud through nginx
+  notify-push:
+    extends:
+      file: ./notify-push/docker-compose.yml
+      service: notify-push
+    environment:
+      # Nextcloud as the push server reaches it, below the same WEBROOT
+      NEXTCLOUD_URL: http://nextcloud-nginx:8080${WEBROOT:-}
+    volumes:
+      - config:/app/config:ro
+    depends_on:
+      nextcloud-php-fpm:
+        condition: service_healthy
+    networks:
+      - nginx-push
+      - php-db
+      - php-redis
+
+  # file locking and distributed cache of Nextcloud and the messages of Client
+  # Push; reachable only from nextcloud-php-fpm and notify-push
+  redis:
+    image: mwaeckerlin/redis
+    volumes:
+      - redis:/data
+    networks:
+      - php-redis
 
   smtp-relay:
     image: mwaeckerlin/smtp-relay
@@ -67,6 +103,9 @@ services:
 
   nextcloud-db:
     image: mariadb
+    # 96M of the image are below the 128M the database checks of the admin
+    # overview ask for; 256M is the value they recommend
+    command: --innodb-log-file-size=256M
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
@@ -99,6 +138,7 @@ volumes:
   config:
   apps:
   db:
+  redis:
 
 
 networks:
@@ -115,5 +155,11 @@ networks:
     driver_opts:
       encrypted: 1
   php-collabora:
+    driver_opts:
+      encrypted: 1
+  php-redis:
+    driver_opts:
+      encrypted: 1
+  nginx-push:
     driver_opts:
       encrypted: 1

@@ -25,7 +25,7 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-mwaeckerlin_nextcloud_e2e}"
 export COMPOSE_PROJECT_NAME
 # the stack plus an SMTP server with login for the mail tests and a browser
 # for the office test
-export COMPOSE_FILE=docker-compose.yml:tests/e2e/docker-compose.mail.yml:tests/e2e/docker-compose.office.yml
+export COMPOSE_FILE=docker-compose.yml:docker-compose.talk.yml:tests/e2e/docker-compose.mail.yml:tests/e2e/docker-compose.office.yml
 
 NEXTCLOUD_HTTP_PORT="${NEXTCLOUD_HTTP_PORT:-8824}"
 HOST_VALUE="${HOST:-localhost:${NEXTCLOUD_HTTP_PORT}}"
@@ -37,6 +37,11 @@ export WEBROOT="${WEBROOT:-}"
 export UPLOAD_MAX_FILESIZE=20G
 export MAX_INPUT_TIME=7200
 export MEMORY_LIMIT=1500M
+# small, so the test sees nextcloud.log emptied
+export LOG_MAX_SIZE=256K
+# the self-test of Client Push runs inside the containers, where localhost is
+# not the host; a browser uses <public URL>/push
+export NOTIFY_PUSH_ENDPOINT=http://nextcloud-nginx:8080/push
 
 if [[ ! -f .env ]]; then
   cp .env.sample .env
@@ -50,6 +55,39 @@ set -a; . ./.env; set +a
 
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${NEXTCLOUD_ADMIN_PASSWORD:?NEXTCLOUD_ADMIN_PASSWORD missing}"
+
+# the Talk high-performance backend of docker-compose.talk.yml, with the
+# configuration of the signaling server the README shows; the address is the
+# internal one for the same reason as above
+export TALK_SIGNALING_URL=http://nextcloud-nginx:8080/standalone-signaling
+NEXTCLOUD_SIGNALING_SECRET=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+export NEXTCLOUD_SIGNALING_SECRET
+TALK_SIGNALING_CONFIG="[http]
+listen = 0.0.0.0:8080
+
+[sessions]
+hashkey = $(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+blockkey = $(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+
+[clients]
+internalsecret = $(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+
+[backend]
+backends = nextcloud
+timeout = 10
+connectionsperhost = 8
+
+[nextcloud]
+urls = ${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT:+/${WEBROOT#/}}, http://nextcloud-nginx:8080${WEBROOT:+/${WEBROOT#/}}
+secret = ${NEXTCLOUD_SIGNALING_SECRET}
+
+[nats]
+url = nats://nats:4222
+
+[mcu]
+type =
+"
+export TALK_SIGNALING_CONFIG
 
 cleanup() {
   echo "[E2E] Tearing down stack"
@@ -173,7 +211,8 @@ docker compose exec -T nextcloud-php-fpm php /usr/local/bin/health.php >/dev/nul
 echo "[E2E] Checking the background jobs"
 # without --no-warnings: occ must print the bare value, so the base image
 # carries pcntl
-MODE=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core backgroundjobs_mode --no-ansi | tr -d '\r\n')
+MODE=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core backgroundjobs_mode --no-ansi | tr -d '\r\n') \
+  || fail "occ config:app:get core backgroundjobs_mode fails, background jobs are not switched to cron (got '$MODE')"
 [[ "$MODE" == "cron" ]] || fail "background jobs do not run by cron (mode: '$MODE')"
 # cron.php records lastcron when its first run ends, at most one interval later
 deadline=$(( $(date +%s) + 900 ))
@@ -201,41 +240,55 @@ done
 grep -q 'Upgrading and repairing the installation' <<<"$(docker compose logs nextcloud-php-fpm)" \
   || fail "the start did not upgrade and repair the installation"
 
-# --- The log goes to the container log only: after installation, requests,
-# occ and cron, no nextcloud.log exists in the data or config volume.
-echo "[E2E] Checking that Nextcloud writes no log file"
-LOGFILES=$(docker compose exec -T nextcloud-php-fpm php -r \
-  'echo implode(" ", array_merge(glob("/app/data/*.log") ?: [], glob("/app/config/*.log") ?: []));')
-if [[ -n "$LOGFILES" ]]; then
+# --- The log: /app/data/nextcloud.log for the app logreader, every entry also
+# in the container log, the file emptied at LOG_MAX_SIZE (256K in this test)
+# and no other log file in the data or config volume.
+logfiles() {
   docker compose exec -T nextcloud-php-fpm php -r \
-    'foreach (explode(" ", $argv[1]) as $f) { echo "--- $f ", filesize($f), " bytes, ", date("c", filemtime($f)), "\n", substr(file_get_contents($f), 0, 4000), "\n"; }' "$LOGFILES" || true
-  docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get log_type || true
-  fail "Nextcloud writes log files into its volumes: $LOGFILES"
-fi
+    'echo implode(" ", array_merge(glob("/app/data/*.log*") ?: [], glob("/app/config/*.log*") ?: []));'
+}
+logsize() {
+  docker compose exec -T nextcloud-php-fpm php -r 'clearstatcache(); echo is_file("/app/data/nextcloud.log") ? filesize("/app/data/nextcloud.log") : -1;'
+}
+echo "[E2E] Checking the log file and the container log"
+[[ "$(logfiles)" == "/app/data/nextcloud.log" ]] \
+  || fail "the volumes hold the log files '$(logfiles)', expected /app/data/nextcloud.log alone"
 grep -q '"reqId"' <<<"$(docker compose logs nextcloud-php-fpm)" \
   || fail "the container log carries no log entry of Nextcloud"
+grep -q '"reqId"' <<<"$(docker compose exec -T nextcloud-php-fpm php -r 'echo file_get_contents("/app/data/nextcloud.log");')" \
+  || fail "nextcloud.log carries no log entry of Nextcloud"
 
-# The settings a legacy installation leaves in config.php: a log file in the
-# data volume, no rotation, debug level. Requests, occ and cron.php still log
-# to the container log and write no file.
+# The settings a legacy installation leaves in config.php: a log file of its
+# own path, no rotation, debug level. The log still goes to nextcloud.log and
+# the container log, and the file stays below LOG_MAX_SIZE while far more than
+# that passes through it.
 echo "[E2E] Checking the log with the saved settings of a legacy installation"
-for setting in "log_type file" "logfile /app/data/nextcloud.log" "log_rotate_size 0 --type=integer" "loglevel 0 --type=integer"; do
+for setting in "log_type syslog" "logfile /app/data/legacy.log" "log_rotate_size 0 --type=integer" "loglevel 0 --type=integer"; do
   set -- $setting
   docker compose exec -T nextcloud-php-fpm php /app/occ config:system:set "$1" --value="$2" ${3:-} --no-warnings --no-ansi >/dev/null
 done
-LOG_LINES_BEFORE=$(docker compose logs nextcloud-php-fpm | grep -c '"reqId"')
-for request in status.php index.php/login remote.php/dav/files/admin/; do
-  curl --silent --max-time 20 -o /dev/null -u "${ADMIN_USER}:${ADMIN_PASS}" \
-    "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT:+/${WEBROOT#/}}/${request}" \
-    || fail "request ${request} through nginx failed"
+LOG_BYTES_BEFORE=$(docker compose logs nextcloud-php-fpm | wc -c)
+for round in $(seq 1 200); do
+  for request in status.php index.php/login remote.php/dav/files/admin/; do
+    curl --silent --max-time 20 -o /dev/null -u "${ADMIN_USER}:${ADMIN_PASS}" \
+      "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT:+/${WEBROOT#/}}/${request}" \
+      || fail "request ${request} through nginx failed"
+  done
+  (( round % 20 == 0 )) || continue
+  sleep 2
+  (( $(docker compose logs nextcloud-php-fpm | wc -c) - LOG_BYTES_BEFORE > 4 * 262144 )) && break
 done
 docker compose exec -T nextcloud-php-fpm php /app/occ status --no-warnings --no-ansi >/dev/null
 docker compose exec -T nextcloud-php-fpm php -f /app/cron.php >/dev/null 2>&1 || true
-LOGFILES=$(docker compose exec -T nextcloud-php-fpm php -r \
-  'echo implode(" ", array_merge(glob("/app/data/*.log") ?: [], glob("/app/config/*.log") ?: []));')
-[[ -z "$LOGFILES" ]] || fail "the saved log settings of a legacy installation create log files: $LOGFILES"
-LOG_LINES_AFTER=$(docker compose logs nextcloud-php-fpm | grep -c '"reqId"')
-(( LOG_LINES_AFTER > LOG_LINES_BEFORE )) || fail "with debug level, nothing reached the container log"
+sleep 3
+LOG_BYTES_PASSED=$(( $(docker compose logs nextcloud-php-fpm | wc -c) - LOG_BYTES_BEFORE ))
+(( LOG_BYTES_PASSED > 4 * 262144 )) \
+  || fail "with debug level only ${LOG_BYTES_PASSED} bytes reached the container log, expected more than 1M"
+LOG_SIZE=$(logsize)
+(( LOG_SIZE >= 0 && LOG_SIZE < 2 * 262144 )) \
+  || fail "nextcloud.log holds ${LOG_SIZE} bytes after ${LOG_BYTES_PASSED} bytes of log, LOG_MAX_SIZE is 256K"
+[[ "$(logfiles)" == "/app/data/nextcloud.log" ]] \
+  || fail "the saved log settings of a legacy installation leave the log files '$(logfiles)'"
 
 # LOGLEVEL overrides a saved level; unset, the saved level applies; with
 # nothing saved, the image default 2 applies.
@@ -302,6 +355,65 @@ UPGRADES_AFTER=$(docker compose logs nextcloud-php-fpm | grep -c 'Upgrading and 
 (( UPGRADES_AFTER > UPGRADES_BEFORE )) || fail "the start after the late database did not upgrade"
 NOW_VERSION=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get version --no-ansi | tr -d '\r\n')
 [[ "$NOW_VERSION" == "$CODE_VERSION" ]] || fail "database stays at version $NOW_VERSION, the image carries $CODE_VERSION"
+# The stopped database left errors in nextcloud.log («Connection refused»,
+# «MySQL server has gone away»), which «Errors in the log» of the admin
+# overview counts. The test empties the file, as LOG_MAX_SIZE does, so that
+# check below sees the errors of normal operation alone.
+docker compose exec -T nextcloud-php-fpm php -r 'file_put_contents("/app/data/nextcloud.log", "");'
+
+# --- An installation from the time of COMPACT tables, with an optional index
+# missing: the next start adds the index and converts the table to DYNAMIC,
+# the conversion in the background while Nextcloud already answers. The
+# password stays inside the database container.
+echo "[E2E] Converting an old row format and adding a missing index"
+db() {
+  docker compose exec -T nextcloud-db sh -c \
+    'MYSQL_PWD=$(cat /run/secrets/nextcloud_db_password) mariadb -unextcloud nextcloud -N -e "$1"' sh "$1"
+}
+db "ALTER TABLE oc_appconfig ROW_FORMAT=COMPACT; DROP INDEX share_with_index ON oc_share"
+[[ "$(db "SELECT row_format FROM information_schema.tables WHERE table_schema='nextcloud' AND table_name='oc_appconfig'")" == "Compact" ]] \
+  || fail "oc_appconfig could not be set to COMPACT for the test"
+docker compose restart nextcloud-php-fpm >/dev/null
+deadline=$(( $(date +%s) + 600 ))
+while :; do
+  ROW_FORMAT=$(db "SELECT row_format FROM information_schema.tables WHERE table_schema='nextcloud' AND table_name='oc_appconfig'")
+  INDEX=$(db "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='nextcloud' AND table_name='oc_share' AND index_name='share_with_index'")
+  [[ "$ROW_FORMAT" == "Dynamic" && "$INDEX" != "0" ]] && break
+  if (( $(date +%s) > deadline )); then
+    docker compose logs --tail=30 nextcloud-php-fpm >&2 || true
+    fail "after the start oc_appconfig is '$ROW_FORMAT' and share_with_index has $INDEX columns"
+  fi
+  sleep 5
+done
+grep -q 'oc_appconfig converted after' <<<"$(docker compose logs nextcloud-php-fpm)" \
+  || fail "the conversion of oc_appconfig is not in the container log"
+# the setup checks run after the repairs and say what remains
+deadline=$(( $(date +%s) + 300 ))
+until grep -qE 'nextcloud-setup-check: (no errors and no warnings|[0-9]+ errors and warnings remain)' <<<"$(docker compose logs nextcloud-php-fpm)"; do
+  (( $(date +%s) > deadline )) && fail "the start wrote no result of the setup checks into the container log"
+  sleep 5
+done
+
+# --- The server ID: every php-fpm gets one in 0..511, SERVER_ID sets it.
+echo "[E2E] Checking the server ID"
+SERVER_ID_DEFAULT=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get serverid --no-warnings --no-ansi | tr -d '\r\n')
+[[ "$SERVER_ID_DEFAULT" =~ ^[0-9]+$ ]] && (( SERVER_ID_DEFAULT <= 511 )) \
+  || fail "the server ID '$SERVER_ID_DEFAULT' is not a number from 0 to 511"
+SERVER_ID_SET=$(docker compose exec -T -e SERVER_ID=7 nextcloud-php-fpm php /app/occ config:system:get serverid --no-warnings --no-ansi | tr -d '\r\n')
+[[ "$SERVER_ID_SET" == "7" ]] || fail "SERVER_ID=7 does not set the server ID: '$SERVER_ID_SET'"
+
+# --- Trusted proxies and Redis: the private networks by default,
+# TRUSTED_PROXIES replaces them; REDIS_HOST of the compose setup locks files.
+echo "[E2E] Checking the trusted proxies and Redis"
+PROXIES=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get trusted_proxies --no-warnings --no-ansi 2>&1 | tr '\r\n' '  ') \
+  || fail "occ config:system:get trusted_proxies fails: $PROXIES"
+[[ "$PROXIES" == *"10.0.0.0/8"*"172.16.0.0/12"*"192.168.0.0/16"* ]] || fail "trusted_proxies are '$PROXIES', not the private networks"
+PROXIES=$(docker compose exec -T -e TRUSTED_PROXIES="198.51.100.7, 203.0.113.0/24" nextcloud-php-fpm php /app/occ config:system:get trusted_proxies --no-warnings --no-ansi 2>&1 | tr '\r\n' '  ') \
+  || fail "occ config:system:get trusted_proxies with TRUSTED_PROXIES fails: $PROXIES"
+[[ "$PROXIES" == *"198.51.100.7"*"203.0.113.0/24"* && "$PROXIES" != *"10.0.0.0/8"* ]] || fail "TRUSTED_PROXIES does not replace the list: '$PROXIES'"
+LOCKING=$(docker compose exec -T nextcloud-php-fpm php /app/occ config:system:get memcache.locking --no-warnings --no-ansi 2>&1 | tr -d '\r\n') \
+  || fail "files are not locked in Redis: occ config:system:get memcache.locking fails: '$LOCKING' (PHP extension redis: $(docker compose exec -T nextcloud-php-fpm php -r 'echo extension_loaded("redis") ? "loaded" : "missing";'))"
+[[ "$LOCKING" == '\OC\Memcache\Redis' ]] || fail "files are not locked in Redis: memcache.locking is '$LOCKING'"
 
 echo "[E2E] Waiting until richdocuments is enabled"
 deadline=$(( $(date +%s) + 300 ))
@@ -361,6 +473,10 @@ docker compose exec -T nextcloud-php-fpm php -r '
 CHANGED_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app files --path=/tmp/files-check --no-warnings --output=json 2>&1) \
   && fail "integrity check does not notice a changed file: $CHANGED_CHECK"
 grep -q 'INVALID_HASH' <<<"$CHANGED_CHECK" || fail "integrity check names no INVALID_HASH: $CHANGED_CHECK"
+# Nextcloud stores that result for the app files and shows it under Overview;
+# the check of the real app replaces it, as «Rescan» does for an administrator
+docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app files --no-warnings --output=json >/dev/null 2>&1 \
+  || fail "the app files does not pass the integrity check after the test of a changed copy"
 
 # --- WOPI configuration ------------------------------------------------
 # `enabled: yes` does not mean the bootstrap already ran
@@ -504,6 +620,27 @@ if [[ "$OFFICE_EXIT" != 0 ]]; then
 fi
 docker rm -f e2e-office-browser >/dev/null 2>&1 || true
 
+# --- The administration pages in a real browser: every warning and error they
+# show fails the test, except the AppAPI deploy daemon the README leaves to
+# the administrator, and two texts Nextcloud shows as a warning card whatever
+# the configuration: the risk of PDF scripting under Basic settings, and that
+# mobile clients make no end-to-end encrypted calls under Talk.
+echo "[E2E] Checking the administration pages in a browser"
+docker rm -f e2e-admin-browser >/dev/null 2>&1 || true
+ADMIN_EXIT=0
+docker compose run --name e2e-admin-browser --entrypoint python3 \
+  -e NC_URL="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}" \
+  -e NC_USER="${ADMIN_USER}" -e NC_PASSWORD="${ADMIN_PASS}" \
+  -e ALLOWED="AppAPI|Enabling PDF scripting|do not support end-to-end encrypted calls" \
+  office-browser /work/admin_pages_test.py || ADMIN_EXIT=$?
+if [[ "$ADMIN_EXIT" != 0 ]]; then
+  docker cp e2e-admin-browser:/tmp/admin-pages-failure.png "${HOST_TMP}/admin-pages-failure.png" >/dev/null 2>&1 \
+    && echo "[E2E] screenshot of the failure: ${HOST_TMP}/admin-pages-failure.png" >&2
+  docker rm -f e2e-admin-browser >/dev/null 2>&1 || true
+  fail "the administration pages show warnings or errors"
+fi
+docker rm -f e2e-admin-browser >/dev/null 2>&1 || true
+
 # --- WebSocket app convention: /ws/<appid>/<path> -> <appid>-ws:3001/<path>
 # A stand-in backend named e2e-ws answers plain HTTP on port 3001 in the
 # network nginx shares with Collabora; nginx must strip /ws/e2e and pass the
@@ -525,6 +662,91 @@ while :; do
   sleep 2
 done
 docker rm -f e2e-ws >/dev/null 2>&1 || true
+
+# --- Client Push: nginx forwards /push/ to the push server, and the self-test
+# of the app notify_push passes: Nextcloud reaches the push server, the push
+# server reaches Nextcloud and Redis, and Nextcloud trusts it as a proxy.
+echo "[E2E] Checking Client Push"
+deadline=$(( $(date +%s) + 300 ))
+until [[ "$(docker compose exec -T nextcloud-php-fpm php /app/occ app:list --output=json --no-warnings 2>/dev/null | tr -d '\r')" == *'"notify_push"'* ]]; do
+  (( $(date +%s) > deadline )) && fail "the start did not install the app notify_push"
+  sleep 5
+done
+# the self-test goes through nginx (NOTIFY_PUSH_ENDPOINT), so it covers /push/
+SELF_TEST=$(docker compose exec -T nextcloud-php-fpm php /app/occ notify_push:self-test --no-ansi 2>&1) \
+  || fail "the self-test of Client Push fails:"$'\n'"$SELF_TEST"
+
+# --- Talk high-performance backend: the start installs Talk and registers the
+# signaling server, nginx forwards /standalone-signaling/ to it; the setup
+# check of Talk below then reaches it.
+echo "[E2E] Checking the Talk high-performance backend"
+deadline=$(( $(date +%s) + 300 ))
+until [[ "$(docker compose exec -T nextcloud-php-fpm php /app/occ app:list --output=json --no-warnings 2>/dev/null | tr -d '\r')" == *'"spreed"'* ]]; do
+  (( $(date +%s) > deadline )) && fail "the start did not install Talk (spreed)"
+  sleep 5
+done
+WELCOME=$(nc_curl "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/standalone-signaling/api/v1/welcome" 2>/dev/null || true)
+[[ "$WELCOME" == *'"nextcloud-spreed-signaling"'* ]] \
+  || fail "/standalone-signaling/api/v1/welcome does not reach the signaling server (got '$WELCOME')"
+
+# --- Collabora is the office of the image: an installation that also has
+# ONLYOFFICE enabled gets it disabled on the next start, richdocuments stays.
+echo "[E2E] Checking that the start leaves Collabora as the only office app"
+docker compose exec -T nextcloud-php-fpm php /app/occ app:install onlyoffice --no-ansi >/dev/null 2>&1 \
+  || docker compose exec -T nextcloud-php-fpm php /app/occ app:enable onlyoffice --no-ansi >/dev/null 2>&1 \
+  || fail "ONLYOFFICE cannot be installed for the test"
+docker compose restart nextcloud-php-fpm >/dev/null
+deadline=$(( $(date +%s) + 600 ))
+until [[ "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q nextcloud-php-fpm)")" == healthy ]]; do
+  (( $(date +%s) > deadline )) && fail "nextcloud-php-fpm not healthy after the restart with ONLYOFFICE"
+  sleep 5
+done
+ENABLED_APPS=$(docker compose exec -T nextcloud-php-fpm php /app/occ app:list --enabled --output=json --no-warnings 2>/dev/null | tr -d '\r')
+[[ "$ENABLED_APPS" != *'"onlyoffice"'* ]] || fail "ONLYOFFICE is still enabled after the start"
+[[ "$ENABLED_APPS" == *'"richdocuments"'* ]] || fail "richdocuments is not enabled after the start"
+
+# --- Administration settings › Overview: every setup check, through the route
+# the page itself calls, with the X-Forwarded-For of a reverse proxy. An error
+# or a warning fails the test, except the checks the README lists as work of
+# the administrator, because they need a service outside these images.
+echo "[E2E] Checking the setup checks of the admin overview"
+# Allowed, as «class» or «class|text the description contains»:
+#   the AppAPI deploy daemon, which the README leaves to the administrator;
+#   HTTPS and HSTS, because this test reaches Nextcloud over plain http
+#   without the reverse proxy that serves both in production;
+#   the signaling server lacking «changed-users»: 2.1.1 of struktur AG is
+#   its latest release and does not have it yet.
+ADMIN_TASKS='OCA\AppAPI\SetupChecks\DaemonCheck
+OCA\Settings\SetupChecks\HttpsUrlGeneration
+OCA\Settings\SetupChecks\SecurityHeaders|Strict-Transport-Security
+OCA\Talk\SetupCheck\HighPerformanceBackend|missing features: changed-users'
+SETUP=$(nc_curl -u "${ADMIN_USER}:${ADMIN_PASS}" -H 'OCS-APIRequest: true' -H 'X-Forwarded-For: 203.0.113.9' \
+  "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/index.php/settings/setupcheck") \
+  || fail "the setup checks of the admin overview do not answer"
+FINDINGS=$(docker compose exec -T nextcloud-php-fpm php -r '
+  $allowed = array_map(fn ($line) => explode("|", $line, 2) + [1 => ""], explode("\n", $argv[1]));
+  $all = json_decode(stream_get_contents(STDIN), true);
+  if (!is_array($all)) { echo "no JSON answer\n"; exit; }
+  foreach ($all as $checks) {
+    foreach ($checks as $class => $result) {
+      if (!in_array($result["severity"], ["error", "warning"], true)) {
+        continue;
+      }
+      foreach ($allowed as [$allowedClass, $text]) {
+        if ($class === $allowedClass && str_contains($result["description"], $text)) {
+          continue 2;
+        }
+      }
+      echo "{$result["severity"]} {$class} ({$result["name"]}): {$result["description"]}\n";
+    }
+  }' "$ADMIN_TASKS" <<<"$SETUP")
+if [[ -n "$FINDINGS" ]]; then
+  # the details the overview only links to
+  docker compose exec -T nextcloud-php-fpm php /app/occ config:app:get core oc.integritycheck.checker --no-warnings 2>&1 | cut -c1-2000 || true
+  docker compose cp tests/e2e/check-urls.php nextcloud-php-fpm:/tmp/check-urls.php >/dev/null 2>&1 \
+    && docker compose exec -T nextcloud-php-fpm php /tmp/check-urls.php 2>&1 || true
+  fail "the admin overview reports:"$'\n'"$FINDINGS"
+fi
 
 echo "E2E succeeded: stack up, richdocuments active, WOPI URLs"
 echo "configured, Collabora discovery + capabilities ok, test document"
