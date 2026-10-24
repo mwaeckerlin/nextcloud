@@ -23,12 +23,26 @@ function run(array $command): void
     }
 }
 
+// The first cron.php run comes first: it switches Nextcloud to cron mode.
+run(['/usr/bin/php', '-f', '/app/cron.php']);
+
+// Once per start, beside php-fpm, so the start does not wait for it: the login
+// method of the database account, which MySQL 9 changes (db-auth.php); the
+// optional indices again, because the run of the start printed nothing while
+// an index of an app (tr_room_object of spreed) was still missing; the tables
+// still in an old row format, rebuilt online by row-format.php; then the setup
+// checks of the admin overview, with the repairs occ offers.
+run(['/usr/bin/php', '/usr/local/bin/db-auth.php']);
+run(['/usr/bin/php', '/app/occ', 'db:add-missing-indices', '--no-interaction', '--no-ansi']);
+run(['/usr/bin/php', '/usr/local/bin/row-format.php']);
+run(['/usr/bin/php', '/usr/local/bin/setup-checks.php']);
+
 $nextScan = time() + SCAN_INTERVAL;
 while (true) {
+    sleep(CRON_INTERVAL);
     run(['/usr/bin/php', '-f', '/app/cron.php']);
     if (time() >= $nextScan) {
         run(['/usr/bin/php', '/app/occ', 'files:scan', '--all', '--no-interaction', '--no-ansi']);
         $nextScan = time() + SCAN_INTERVAL;
     }
-    sleep(CRON_INTERVAL);
 }

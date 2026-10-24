@@ -8,14 +8,19 @@ RUN gpg --dearmor < /tmp/nextcloud.asc > /tmp/nextcloud.gpg
 RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 RUN find . -name '*.php' -exec sh -c 'rm "{}" && touch "{}"' \;
-# source maps: only the developer tools of a browser request them
-RUN find . -name '*.map' -delete
+# source maps: only the developer tools of a browser request them; the setup
+# check of the admin overview requests map-test.js.map, so that one stays
+RUN find . -name '*.map' ! -path './apps/settings/js/map-test.js.map' -delete
 # sample files php-fpm copies into the folder of a new user; no page links them
 RUN rm -rf core/skeleton
 
 FROM mwaeckerlin/nginx AS production
 ENV CONTAINERNAME "nextcloud-nginx"
 ENV PHP_FPM_HOST "nextcloud-php-fpm"
+# push server of Client Push behind /push/
+ENV NOTIFY_PUSH_HOST "notify-push"
+# signaling server of the Talk high-performance backend behind /standalone-signaling/
+ENV TALK_SIGNALING_HOST "signaling"
 ENV WEBROOT ""
 # seconds nginx waits for php-fpm; the variable of the legacy image
 ENV MAX_INPUT_TIME "3600"

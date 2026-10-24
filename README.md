@@ -63,6 +63,9 @@ The stack needs these secrets:
 | `nextcloud_db_password`  | `nextcloud-php-fpm`, `nextcloud-db`   | MariaDB password               |
 | `nextcloud_admin_password` | `nextcloud-php-fpm`                 | Initial Nextcloud admin password |
 | `nextcloud_smtp_password` | `nextcloud-php-fpm`, optional        | Password of an external mail server; see [Mail server](#mail-server) |
+| `nextcloud_redis_password` | `nextcloud-php-fpm`, optional       | Password of Redis, where `REDIS_PASSWORD` of `mwaeckerlin/redis` sets one |
+| `nextcloud_signaling_secret` | `nextcloud-php-fpm`, with Talk    | Secret Nextcloud shares with the signaling server; see [Talk high-performance backend](#talk-high-performance-backend) |
+| `talk_signaling_config`  | `signaling`, with Talk                | Configuration of the signaling server, its secrets included |
 
 ### Creating secrets
 
@@ -114,6 +117,8 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `ROOT` (default `/app`): document root served by NGINX.
   - `WEBROOT`: optional URL prefix such as `/nextcloud`; must match the PHP-FPM `WEBROOT` value.
   - `MAX_INPUT_TIME` (default `3600`): seconds NGINX waits for php-fpm (`fastcgi_read_timeout`, `fastcgi_send_timeout`); set it to the same value as on `nextcloud-php-fpm`.
+  - `NOTIFY_PUSH_HOST` (default `notify-push`): push server of [Client Push](#client-push) behind `/push/`; NGINX answers 502 there while none runs.
+  - `TALK_SIGNALING_HOST` (default `signaling`): signaling server of the [Talk high-performance backend](#talk-high-performance-backend) behind `/standalone-signaling/`; 502 while none runs.
 
 - **nextcloud-php-fpm**
   - `ADMIN_USER`: Nextcloud admin login name; default `admin`.
@@ -126,6 +131,8 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `MAX_INPUT_TIME` (default `3600`): seconds a request may take to arrive and to run; sets `max_input_time` and `max_execution_time` of PHP.
   - `MAX_REQUEST_WORKERS` (default `100`): most PHP processes at the same time, `pm.max_children` of php-fpm; see [Database connections](#database-connections).
   - `WAIT_SECONDS_FOR_MYSQL` (default `300`): seconds the first installation retries while the database does not answer; then php-fpm starts without it.
+  - `OPCACHE_INTERNED_STRINGS_BUFFER` (default `32`) and `OPCACHE_MEMORY_CONSUMPTION` (default `128`): megabytes of OPcache for interned strings and for compiled code, variables of the base image `mwaeckerlin/php-fpm`; the admin overview warns at the PHP default of `8` for interned strings.
+  - `SERVER_ID`: number from `0` to `511` that Nextcloud writes into the IDs it generates; every php-fpm on the same database needs its own. Unset, each container derives one from its host name.
   - `PROTOCOL`: public protocol; default `https`.
   - `SELF_CHECK_URL`: optional override for the generated CLI/self-check URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `WEBROOT`: URL sub-path if Nextcloud is not at `/` (e.g. `/nextcloud`); sets `overwritewebroot` and must match the NGINX `WEBROOT` value.
@@ -138,9 +145,15 @@ The `<<<` herestring avoids a trailing newline. Swarm secrets are encrypted at r
   - `OFFICE_WOPI_URL`: internal Collabora endpoint; default `http://collabora:9980`.
   - `OFFICE_PUBLIC_WOPI_URL`: optional override for the public WOPI URL; by default it is derived from `PROTOCOL://HOST[/WEBROOT]`.
   - `OFFICE_CALLBACK_URL`: optional override for the internal callback URL; by default it is derived from `http://nextcloud-nginx:8080[/WEBROOT]`.
+  - `OFFICE_WOPI_ALLOWLIST`: addresses or networks, separated by commas, that may fetch documents over WOPI, the allowlist of Nextcloud Office; empty, the private networks `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, in which Collabora of the stack runs. Without an allowlist any host may fetch documents, and Nextcloud Office warns about it.
   - `APPSTORE_TIMEOUT`: app-store fetch timeout in seconds for installing `richdocuments`; default `600` (the ~12 MB store index aborts at Nextcloud's 120 s default on slow connections).
   - `MAIL_FROM_ADDRESS` (default `nextcloud`) and `MAIL_DOMAIN` (default: `HOST` without port): the sender of mails, `mail_from_address@mail_domain`.
-  - `LOGLEVEL`: Nextcloud log level, `0` debug to `4` fatal; set, it overrides a level saved in `config.php`, e.g. a debug level `0` an earlier installation left there; unset, the saved level applies, otherwise `2`. Nextcloud logs to the container log only (`log_type` `errorlog`, `logfile` `/proc/self/fd/2`), never to a file in a volume, so `docker logs` shows it and Docker rotates it.
+  - `LOGLEVEL`: Nextcloud log level, `0` debug to `4` fatal; set, it overrides a level saved in `config.php`, e.g. a debug level `0` an earlier installation left there; unset, the saved level applies, otherwise `2`.
+  - `LOG_MAX_SIZE` (default `100M`): largest size of `/app/data/nextcloud.log`. Nextcloud writes its log there, whatever `log_type` and `logfile` an earlier installation saved, so the log stays readable under Administration settings › Logging. `/usr/local/bin/log-follow.php` passes every line on to the container log and empties the file once it reaches this size; no rotated copy stays behind. Units `K`, `M`, `G`.
+  - `TRUSTED_PROXIES`: addresses or networks, separated by spaces or commas, whose `X-Forwarded-For` Nextcloud reads as the client address. Unset, a list saved in `config.php` applies, otherwise the private networks `10.0.0.0/8 172.16.0.0/12 192.168.0.0/16`, in which Docker creates its networks. Trade-off: every container in these networks could claim another client address. A reverse proxy in front of `nginx` adds the real address on the right of `X-Forwarded-For`, and Nextcloud takes that one. Where clients reach the port of `nginx` directly and arrive with a private address, they can claim any address and so bypass the brute-force protection of the login. This happens through the routing mesh of a swarm (`ports` in mode `ingress`) and through `docker-proxy`. In that case `TRUSTED_PROXIES` names the address of the proxy, or the port is published in mode `host`.
+  - `REDIS_HOST`, `REDIS_PORT` (default `6379`), secret `nextcloud_redis_password` or `REDIS_PASSWORD`: Redis for file locking and the cache all php-fpm containers share; the compose setup sets `REDIS_HOST: redis`. Unset, Nextcloud locks files in the database.
+  - `NOTIFY_PUSH_HOST`: the push server of [Client Push](#client-push); set, the start installs the app `notify_push` and sends the clients to `<public URL>/push`. `NOTIFY_PUSH_ENDPOINT` sets another address.
+  - `TALK_SIGNALING_HOST`: the signaling server of the [Talk high-performance backend](#talk-high-performance-backend); set, the start installs Talk and registers it at `<public URL>/standalone-signaling`. `TALK_SIGNALING_URL` sets another address.
   - `MAIL_SMTPHOST`, `MAIL_SMTPPORT`, `MAIL_SMTPSECURE`, `MAIL_SMTPNAME`, `MAIL_SMTPPASSWORD`: an external mail server; see [Mail server](#mail-server).
   - `NC_<key>`: Nextcloud itself reads every setting of `config.php` from a variable of that name, e.g. `NC_mail_smtpauthtype`; such a variable takes precedence over every config file.
 
@@ -181,7 +194,7 @@ Any other mail setting, and any setting of `config.php`, is set by the variable 
 
 The base image `mwaeckerlin/php-fpm` also knows `POST_MAX_SIZE`, `MAX_EXECUTION_TIME` and `MAX_CHILDREN`. In this image they follow the variables of the legacy image and are not set on their own: `UPLOAD_MAX_FILESIZE` sets `post_max_size`, `MAX_INPUT_TIME` sets `max_execution_time`, `MAX_REQUEST_WORKERS` sets `pm.max_children`.
 
-A PHP setting without a variable above, such as the sizes of OPcache, goes into an `.ini` file mounted into `/usr/local/etc/php/conf.d/` of `nextcloud-php-fpm`. The five limits that `UPLOAD_MAX_FILESIZE`, `MEMORY_LIMIT` and `MAX_INPUT_TIME` set reach php-fpm as `-d` options, which take precedence over every `.ini` file, so they change only through the variables.
+The base image `mwaeckerlin/php-fpm` declares `exec`, `shell_exec`, `system` and `passthru` off. The image runs without a shell on purpose, and PHP would still report these functions as available, so Talk and Nextcloud would take the failing call instead of their own way around it, logging «Unable to fork» and reporting an incompatible Apache; declared off, they skip them. A PHP setting without a variable above goes into an `.ini` file mounted into `/usr/local/etc/php/conf.d/` of `nextcloud-php-fpm`. The five limits that `UPLOAD_MAX_FILESIZE`, `MEMORY_LIMIT` and `MAX_INPUT_TIME` set reach php-fpm as `-d` options, which take precedence over every `.ini` file, so they change only through the variables.
 
 ### Database connections
 
@@ -233,7 +246,91 @@ The start first waits up to `WAIT_SECONDS_FOR_MYSQL` until `occ status` answers,
 
 The paths of the legacy image lead to the same place: `/var/www/nextcloud` is a link to `/app`, so the `datadirectory` `/var/www/nextcloud/data` in a `config.php` of the legacy image and a volume mounted at `/var/www/nextcloud/data` or `/var/www/nextcloud/config` work unchanged. The `apps` volume of the legacy image holds the shipped apps of its old version beside the installed ones; it is mounted at `/app/custom_apps`, because at `/var/www/nextcloud/apps` it would hide the shipped apps of the new version.
 
-Beside php-fpm, `/usr/local/bin/cron.php` runs `/app/cron.php` every 15 minutes and `occ files:scan --all` once a day; the first run switches Nextcloud's background jobs to cron mode.
+Beside php-fpm, `/usr/local/bin/cron.php` runs `/app/cron.php` every 15 minutes and `occ files:scan --all` once a day; the first run switches Nextcloud's background jobs to cron mode. Once per start it also runs, while Nextcloud already answers, `/usr/local/bin/db-auth.php`, `occ db:add-missing-indices` again, `/usr/local/bin/row-format.php` and `/usr/local/bin/setup-checks.php`. The last one runs the setup checks of the admin overview with `occ setupchecks`, repairs what an `occ` command repairs, runs them again and writes every error and warning that stays into the container log, as lines `nextcloud-setup-check: …`, ending with `no errors and no warnings` or the number that remains.
+
+### Admin overview
+
+Administration settings › Overview lists the setup checks of Nextcloud. The tests run every check through the route this page calls and fail on every error and warning, except the ones below that need a service outside these images.
+
+The images settle these checks themselves:
+
+| Check | What the images do |
+| --- | --- |
+| MySQL row format | Tables created before MariaDB 10.2.2 and MySQL 5.7.9 kept `ROW_FORMAT=COMPACT`. The migrations of Nextcloud never change the format of an existing table, and its collation repair touches only tables with a wrong collation, so no `occ` command fixes them. `row-format.php` converts each such table with `ALTER TABLE … ROW_FORMAT=DYNAMIC, ALGORITHM=INPLACE, LOCK=NONE` and logs every table with its duration; Nextcloud reads and writes the table meanwhile. |
+| Database missing indices, columns, primary keys, big integer conversion, mimetype migration, system address book | `occ db:add-missing-indices` at the start and once more beside php-fpm; the others through `setup-checks.php` with the `occ` command each check names. |
+| JavaScript source maps | `nginx` keeps `apps/settings/js/map-test.js.map`, the one map file the check requests. |
+| PHP OPcache | `OPCACHE_INTERNED_STRINGS_BUFFER`, default `32`. |
+| Configuration server ID | `SERVER_ID`, or a value derived from the host name of the container. |
+| Forwarded for headers | `TRUSTED_PROXIES`, default the private networks of Docker. |
+| Transactional file locking | Redis with `REDIS_HOST`, the service `redis` of the compose setup. |
+| Client Push | the image `mwaeckerlin/nextcloud:notify-push`, see [Client Push](#client-push). |
+| High-performance backend | `docker-compose.talk.yml`, see [Talk high-performance backend](#talk-high-performance-backend). |
+| Errors in the log of a fresh installation | The start creates `appdata/theming/global`, without which the background job `MigrateBackgroundImages` of Nextcloud fails once. |
+| Errors in the log, code integrity, memory cache | the log file for `logreader` with `LOG_MAX_SIZE`, the build signs the release again, APCu as local cache. |
+| Database configuration (app `serverinfo`) | The compose setup starts MariaDB with `--innodb-log-file-size=256M`; the image default of 96M is below the 128M the check asks for. A database outside this stack needs the same setting. The checks of `serverinfo` that count events wait for 24 hours of uptime of the database. |
+| Login method of the database account | MySQL 8.0 deprecates `mysql_native_password`, 8.4 switches it off by default and 9.0 removes it. `db-auth.php` reads the method of its own account on MySQL and, while it is `mysql_native_password`, writes a line `nextcloud-db-auth: warning: …` into the container log with the `ALTER USER` for that account. Switching the method needs the privilege `CREATE USER`, which Nextcloud does not have, so the administrator of the database runs it; PHP then logs in with `caching_sha2_password` without TLS as well. MariaDB is left as it is. |
+
+These need the administrator:
+
+- **Reverse proxy:** `.well-known` URLs and `Strict-Transport-Security` are answered by the proxy in front of `nginx`. It forwards every `/.well-known` path except `acme-challenge` to `nginx` and sets HSTS on forwarded responses; [mwaeckerlin/reverse-proxy] does both from version 2.0.7.
+- **MySQL 9:** an installation on MySQL whose accounts still log in with `mysql_native_password` needs, before the upgrade to MySQL 9: `ALTER USER 'nextcloud'@'%' IDENTIFIED WITH caching_sha2_password BY '<password>';`, the same for `'root'@'%'` and `'root'@'localhost'` with the root password, and the option `--mysql-native-password` removed from the command of the server, because MySQL 9 knows neither the method nor the option.
+- **Saved debug level:** an installation of the legacy image may hold `loglevel` `0` in `config.php`, which writes every debug line into the log. `LOGLEVEL=2` overrides it.
+- **Code integrity of an earlier scan:** Nextcloud shows the result of the last full scan until **Rescan** runs it again; an app that was updated since appears with files it no longer has.
+- **AppAPI deploy daemon** (check `OCA\AppAPI\SetupChecks\DaemonCheck`): AppAPI installs external apps as containers of their own and needs a daemon that starts them through the Docker socket of the host. These images do not provide it: a container with the Docker socket controls every container of the host and is root there. Whoever wants external apps registers a daemon under Administration settings › AppAPI, as the [AppAPI documentation](https://docs.nextcloud.com/server/latest/admin_manual/exapps_management/AppAPIAndExternalApps.html) describes; whoever does not disables the app with `occ app:disable app_api`, and the warning disappears.
+
+### Client Push
+
+Desktop and mobile clients of Nextcloud learn about changed files from a push server instead of asking every few seconds, and the app Talk delivers its notifications at once. The image `mwaeckerlin/nextcloud:notify-push` holds the push server of the app `notify_push` («Client Push»), the static binary of its latest release and nothing else.
+
+1. Run the service `notify-push` of `docker-compose.yml`: it mounts the `config` volume read-only and reads the database from `config.php`, takes Redis from `REDIS_URL` (default `redis://redis`) and checks its clients against Nextcloud at `NEXTCLOUD_URL` (default `http://nextcloud-nginx:8080`; with a `WEBROOT` it ends with it, as `docker-compose.yml` sets it). It needs the networks of the database, of Redis and of `nginx`.
+2. Set `NOTIFY_PUSH_HOST: notify-push` on `nextcloud-php-fpm` and `REDIS_HOST`; Client Push needs Redis.
+3. On the next start Nextcloud installs `notify_push` from the App Store and sends the clients to `<public URL>/push`, which `nginx` forwards to the push server.
+
+`occ notify_push:self-test` in `nextcloud-php-fpm` checks the whole chain. The App Store updates the app, and the weekly rebuild of the image takes the matching release of the push server along.
+
+### Talk high-performance backend
+
+Without it Talk carries calls of two or three participants, and the admin overview reports an error. `docker-compose.talk.yml` adds the signaling server of struktur AG (`strukturag/nextcloud-spreed-signaling`) and NATS, its message bus:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.talk.yml up
+```
+
+`nginx` forwards `/standalone-signaling/` to the signaling server. With `TALK_SIGNALING_HOST` set, the start of `nextcloud-php-fpm` installs Talk from the App Store and registers the signaling server at `<public URL>/standalone-signaling`, or at `TALK_SIGNALING_URL`; the shared secret comes from the secret `nextcloud_signaling_secret` and never stands on a command line.
+
+The signaling server reads its whole configuration, its secrets included, from the secret `talk_signaling_config`. Its content, with the four values generated once, for example with `pwgen -s 64 1`:
+
+```ini
+[http]
+listen = 0.0.0.0:8080
+
+[sessions]
+hashkey = <64 random characters>
+blockkey = <exactly 16 random characters>
+
+[clients]
+internalsecret = <random characters>
+
+[backend]
+backends = nextcloud
+timeout = 10
+connectionsperhost = 8
+
+[nextcloud]
+# the public URL of Nextcloud, with its WEBROOT
+urls = https://cloud.example.com
+secret = <the same value as the secret nextcloud_signaling_secret>
+
+[nats]
+url = nats://nats:4222
+
+[mcu]
+type =
+```
+
+In a swarm both secrets are created with `docker secret create nextcloud_signaling_secret -` and `docker secret create talk_signaling_config server.conf`; `docker-compose.talk.yml` reads them from `NEXTCLOUD_SIGNALING_SECRET` and `TALK_SIGNALING_CONFIG` for Docker Compose.
+
+The signaling server relays the messages of a call between the browsers; the audio and video still flow directly between the participants. Calls with many participants also need a media server (Janus, `[mcu] type = janus`) and a TURN server for participants behind restrictive firewalls; both need UDP ports reachable from the internet and are not part of `docker-compose.talk.yml`.
 
 
 ## Docker Compose Setup
@@ -386,6 +483,7 @@ services:
 
   nextcloud-db:
     image: mariadb:11.8
+    command: --innodb-log-file-size=256M
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
@@ -621,7 +719,7 @@ This keeps browser links correct while letting Collabora reliably reach internal
 The integration remains reproducible with fresh volumes if the following points are in place:
 
 1. The Dockerfile includes office defaults (`OFFICE_WOPI_URL`, `OFFICE_PUBLIC_WOPI_URL`, `OFFICE_CALLBACK_URL`) and the bootstrap entrypoint. Public and callback URLs are intentionally empty by default and auto-generated from `HOST`, `PROTOCOL` and `WEBROOT`.
-2. `office-bootstrap.php` installs/enables `richdocuments` and sets required app values via `occ`.
+2. `office-bootstrap.php` installs/enables `richdocuments` and sets required app values via `occ`. It disables ONLYOFFICE where an earlier installation enabled it: both apps claim the same file types, and Collabora is the office of this stack.
 3. `custom.config.php` is always loaded (either from the image or as a bind mount, as in this Compose file).
 4. With an empty `config` volume, `autoconfig.php` is provided automatically and first-time setup runs headless.
 
@@ -652,3 +750,4 @@ If these three points are stable, the integration is usually correct.
 [mwaeckerlin/nginx]: https://github.com/mwaeckerlin/nginx "NGINX Service Base Image"
 [mwaeckerlin/php-fpm]: https://github.com/mwaeckerlin/php-fpm "PHP-FPM Service Base Image"
 [nextcloud]: https://hub.docker.com/_/nextcloud "the official Nextcloud Docker image"
+[mwaeckerlin/reverse-proxy]: https://github.com/mwaeckerlin/reverse-proxy "Reverse Proxy with Let's Encrypt"
