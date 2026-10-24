@@ -1,5 +1,28 @@
 # Changelog
 
+- 2026-10-24 **1.1.11**
+    - The images are rebuilt in an hourly check once a parent image or a download changed or the image is a week old, instead of once a week.
+    - Tables still in `ROW_FORMAT=COMPACT` from an old installation are converted to `DYNAMIC` once per start, online, beside php-fpm; `occ db:add-missing-indices` runs there once more, because the run of the start left an index of an app missing.
+    - Both images keep `apps/settings/js/map-test.js.map`: `nginx` serves it, and `php-fpm` needs it to build its address, so the source map check of the admin overview passes.
+    - The start creates `appdata/theming/global` before the first background job: on a fresh installation the job `MigrateBackgroundImages` of Nextcloud failed on the missing folder, and the admin overview reported an error in the log.
+    - The compose setup starts MariaDB with `--innodb-log-file-size=256M`, which the database checks of the admin overview ask for.
+    - The image `php-fpm` builds on `mwaeckerlin/php-fpm` 1.2.11: OPcache keeps 32 MB for interned strings, `OPCACHE_INTERNED_STRINGS_BUFFER` and `OPCACHE_MEMORY_CONSUMPTION` set other sizes, and PHP loads the extension `redis`.
+    - Every php-fpm container has a server ID; `SERVER_ID` now sets the key `serverid` Nextcloud reads, it set `server_id` before, which Nextcloud ignores.
+    - The setup checks of the admin overview reach `nginx` from inside the container as `nextcloud-nginx:8080`.
+    - The tests run every setup check of the admin overview and fail on its errors and warnings; the README lists what the administrator sets up outside the images.
+    - On MySQL every start warns while the account of Nextcloud logs in with `mysql_native_password`, which MySQL 9 removes, and names the `ALTER USER` that switches it to `caching_sha2_password`.
+    - Once per start the setup checks run beside php-fpm, repair what an `occ` command repairs and write what remains into the container log.
+    - Nextcloud writes its log again to `/app/data/nextcloud.log`, readable under Administration settings › Logging; every line also reaches the container log, and the file is emptied at `LOG_MAX_SIZE` (default 100M) without leaving a rotated copy.
+    - Nextcloud reads the client address from `X-Forwarded-For` of the proxies in `TRUSTED_PROXIES`, by default the private networks of Docker.
+    - With `REDIS_HOST` Nextcloud locks files and shares its cache in Redis; the compose setup runs `mwaeckerlin/redis`.
+    - New image `mwaeckerlin/nextcloud:notify-push`, the push server of Client Push; with `NOTIFY_PUSH_HOST` the start installs the app `notify_push`, and `nginx` forwards `/push/` to the push server.
+    - `docker-compose.talk.yml` adds the Talk high-performance backend, a signaling server and NATS; with `TALK_SIGNALING_HOST` the start installs Talk and registers the server, and `nginx` forwards `/standalone-signaling/` to it.
+    - `nginx` serves `.wasm`, `.tflite` and `.webp` files of apps directly.
+    - PHP declares `exec`, `shell_exec`, `system` and `passthru` off, from `mwaeckerlin/php-fpm` 1.2.12, as fits an image without a shell; reported as available, they made Nextcloud log «exec(): Unable to fork» and Talk report an incompatible Apache configuration.
+    - Collabora is the only office app: the start disables ONLYOFFICE where an earlier installation enabled it, because both claim the same file types.
+    - Nextcloud Office allows WOPI requests only from the private networks of Docker, or from `OFFICE_WOPI_ALLOWLIST`; an empty variable removed the allowlist before, and Nextcloud Office warned that any host could fetch documents.
+    - A browser test opens the administration pages Overview, Basic settings, Nextcloud Office, Talk and Logging and fails on every warning and error they show.
+
 - 2026-10-23 **1.1.10**
     - The image `nginx` starts without `php-fpm` and Collabora and answers 502 until they are there; in a Docker Swarm it died at the start while their names were not yet in the DNS.
     - The image `php-fpm` waits for the database before it decides between installation and upgrade, so a database that starts together with it no longer skips the upgrade.

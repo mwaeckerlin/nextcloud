@@ -1,6 +1,6 @@
 # Builds the images of this repository for amd64 and arm64 and publishes them
-# on Docker Hub, on every push to a live branch and once a week for the
-# security fixes of the base images. The build itself is the reusable workflow
+# on Docker Hub, on every push to a live branch, and in the hourly check when a
+# parent image or a download changed or the image is a week old. The build itself is the reusable workflow
 # docker-image.yml of mwaeckerlin/scratch; its README explains the setup.
 #
 # Nextcloud upgrades one major version at a time, so every major version has
@@ -19,9 +19,7 @@ on:
   push:
     branches: [master, new, "new-*", "3[0-9]"]
   schedule:
-    # weekly rebuild, one hour per level after the images it is built on:
-    # mwaeckerlin/nginx and mwaeckerlin/php-fpm at 05:17, this repository at level 3
-    - cron: "17 6 * * 1"
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 # one run per branch at a time; a branch never cancels the run of another

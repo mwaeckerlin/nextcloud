@@ -81,14 +81,14 @@ for image in "$@"; do
         sleep 5
         running=$(docker inspect --format '{{.State.Running}}' nc-contract-nginx-alone 2> /dev/null)
         codes=""
-        for path in /index.php /browser/dist/cool.html /hosting/discovery; do
+        for path in /index.php /browser/dist/cool.html /hosting/discovery /push/test/version /standalone-signaling/api/v1/welcome; do
             codes+="$(docker run --rm --network "${alone_net}" curlimages/curl:8.10.1 --silent --max-time 10 \
                 --output /dev/null --write-out '%{http_code}' "http://nc-contract-nginx-alone:8080${path}") "
         done
         startlog=$(grep -m1 'emerg' <<< "$(docker logs nc-contract-nginx-alone 2>&1)" || true)
         docker rm -f nc-contract-nginx-alone > /dev/null
         docker network rm "${alone_net}" > /dev/null
-        if [[ "${running}" == "true" && "${codes}" == "502 502 502 " ]]; then
+        if [[ "${running}" == "true" && "${codes}" == "502 502 502 502 502 " ]]; then
             _pass "${image}_starts_without_upstreams"
         else
             _fail "${image}_starts_without_upstreams" "running=${running}, answers ${codes}${startlog}"
@@ -96,12 +96,14 @@ for image in "$@"; do
         # The nginx image leaves out what no browser requests: source maps and
         # the sample files of new users. The browser still loads the bundles
         # and both forms of the translations (l10n/<lang>.js, and
-        # l10n/<lang>.json through loadTranslations of @nextcloud/l10n).
+        # l10n/<lang>.json through loadTranslations of @nextcloud/l10n). The
+        # one source map the setup check of the admin overview requests stays.
         lister=$(docker create --pull=never "${image}")
         files=$(docker export "${lister}" | tar -t)
         docker rm "${lister}" > /dev/null
-        if grep -q '\.map$' <<< "${files}"; then
-            _fail "${image}_no_source_maps" "$(grep -c '\.map$' <<< "${files}") .map files in the image"
+        maps=$(grep '\.map$' <<< "${files}" | grep -vx 'app/apps/settings/js/map-test.js.map' || true)
+        if [[ -n "${maps}" ]]; then
+            _fail "${image}_no_source_maps" "$(grep -c . <<< "${maps}") .map files in the image"
         else
             _pass "${image}_no_source_maps"
         fi
@@ -110,7 +112,7 @@ for image in "$@"; do
         else
             _pass "${image}_no_skeleton"
         fi
-        for kept in app/dist/core-common.js app/core/l10n/de.js app/core/l10n/de.json; do
+        for kept in app/dist/core-common.js app/core/l10n/de.js app/core/l10n/de.json app/apps/settings/js/map-test.js.map; do
             if grep -qx "${kept}" <<< "${files}"; then
                 _pass "${image}_keeps_${kept}"
             else
@@ -120,17 +122,25 @@ for image in "$@"; do
     fi
     if [[ "${image}" == *:php-fpm* ]]; then
         _nextcloud_major "${image}"
-        # php-fpm only checks that the browser files exist: no source maps,
-        # JavaScript and CSS are empty, and the release is signed again by a
-        # CA of the build that root.crt lists after the Nextcloud CA.
+        # php-fpm only checks that the browser files exist: no source maps but
+        # the one the setup check links to with linkTo(), which needs the file
+        # in php-fpm to build its address; JavaScript and CSS are empty, and
+        # the release is signed again by a CA of the build that root.crt
+        # lists after the Nextcloud CA.
         lister=$(docker create --pull=never "${image}")
         listing=$(docker export "${lister}" | tar -tv)
         root_crt=$(docker export "${lister}" | tar -xO app/resources/codesigning/root.crt)
         docker rm "${lister}" > /dev/null
-        if grep -q '\.map$' <<< "${listing}"; then
-            _fail "${image}_no_source_maps" "$(grep -c '\.map$' <<< "${listing}") .map files in the image"
+        maps=$(grep '\.map$' <<< "${listing}" | grep -v ' app/apps/settings/js/map-test\.js\.map$' || true)
+        if [[ -n "${maps}" ]]; then
+            _fail "${image}_no_source_maps" "$(grep -c . <<< "${maps}") .map files in the image"
         else
             _pass "${image}_no_source_maps"
+        fi
+        if grep -q ' app/apps/settings/js/map-test\.js\.map$' <<< "${listing}"; then
+            _pass "${image}_keeps_map_test"
+        else
+            _fail "${image}_keeps_map_test" "app/apps/settings/js/map-test.js.map is missing"
         fi
         # a new data or config volume takes over what the image holds there,
         # so a log file of the build would be the start of a growing file
@@ -188,6 +198,30 @@ for image in "$@"; do
         else
             _fail "${image}_session_upload_progress_off" "$(grep -i 'session.upload_progress.enabled' <<< "${info}" || echo 'setting not reported')"
         fi
+        # Without a shell exec() can only fail, and Talk and Nextcloud report
+        # that as errors; with exec off they skip it.
+        if grep -Eq '^disable_functions => exec,shell_exec,system,passthru => ' <<< "${info}"; then
+            _pass "${image}_shell_functions_disabled"
+        else
+            _fail "${image}_shell_functions_disabled" "$(grep '^disable_functions' <<< "${info}" || echo 'disable_functions not reported')"
+        fi
+        # The admin overview warns while OPcache keeps the PHP default of 8 MB
+        # for interned strings; the image sets 32, OPCACHE_INTERNED_STRINGS_BUFFER
+        # another value.
+        for buffer in default 64; do
+            option=()
+            expected=32
+            if [[ "${buffer}" != default ]]; then
+                option=(-e "OPCACHE_INTERNED_STRINGS_BUFFER=${buffer}")
+                expected=${buffer}
+            fi
+            info=$(docker run --rm --pull=never "${option[@]}" --entrypoint /usr/sbin/php-fpm "${image}" -i 2>&1)
+            if grep -Eq "^opcache\.interned_strings_buffer => ${expected} => ${expected}$" <<< "${info}"; then
+                _pass "${image}_opcache_interned_strings_buffer_${buffer}"
+            else
+                _fail "${image}_opcache_interned_strings_buffer_${buffer}" "$(grep 'opcache.interned_strings_buffer' <<< "${info}" || echo 'OPcache not reported')"
+            fi
+        done
         # MAX_CHILDREN of the base image does not override MAX_REQUEST_WORKERS:
         # zz-nextcloud.conf is read after www.conf of the base image.
         pool=$(docker run --rm --pull=never -e MAX_CHILDREN=7 --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
@@ -234,6 +268,47 @@ for image in "$@"; do
         else
             _fail "${image}_wait_seconds_for_mysql" "no end of the retry window within 90s, log: $(grep 'nextcloud-office-bootstrap' <<< "${waiter_log}" | cut -c1-300)"
         fi
+        # MySQL 9 removes mysql_native_password: db-auth.php warns about the
+        # account Nextcloud logs in with and names the ALTER USER; after an
+        # administrator ran it, PHP logs in with caching_sha2_password. Against
+        # a real MySQL 8.4 without TLS, as in the stack.
+        mysql_net="nc-contract-mysql-$$"
+        docker network create "${mysql_net}" > /dev/null
+        docker run -d --name nc-contract-mysql --network "${mysql_net}" \
+            -e MYSQL_ROOT_PASSWORD=contract-root -e MYSQL_DATABASE=nextcloud \
+            mysql:8.4 --mysql-native-password=ON > /dev/null
+        for second in $(seq 1 180); do
+            docker exec nc-contract-mysql mysql -uroot -pcontract-root -e 'SELECT 1' > /dev/null 2>&1 && break
+            sleep 1
+        done
+        docker exec nc-contract-mysql mysql -uroot -pcontract-root -e \
+            "CREATE USER 'nextcloud'@'%' IDENTIFIED WITH mysql_native_password BY 'contract-pw'; GRANT ALL ON nextcloud.* TO 'nextcloud'@'%';" > /dev/null 2>&1
+        auth_config=$(mktemp)
+        printf '<?php\n$CONFIG = ["dbtype" => "mysql", "dbhost" => "nc-contract-mysql", "dbname" => "nextcloud", "dbuser" => "nextcloud", "dbpassword" => "contract-pw"];\n' > "${auth_config}"
+        # mktemp creates it for its owner alone; the user of the image reads it
+        chmod 644 "${auth_config}"
+        auth_run() {
+            local runner
+            runner=$(docker create --pull=never --network "${mysql_net}" --entrypoint /usr/bin/php "${image}" /usr/local/bin/db-auth.php /tmp/config.php)
+            docker cp "${auth_config}" "${runner}:/tmp/config.php" > /dev/null
+            docker start -a "${runner}" 2>&1 || true
+            docker rm "${runner}" > /dev/null
+        }
+        auth_first=$(auth_run)
+        docker exec nc-contract-mysql mysql -uroot -pcontract-root -e \
+            "ALTER USER 'nextcloud'@'%' IDENTIFIED WITH caching_sha2_password BY 'contract-pw'; FLUSH PRIVILEGES;" > /dev/null 2>&1
+        auth_plugin=$(docker exec nc-contract-mysql mysql -uroot -pcontract-root -N -e "SELECT plugin FROM mysql.user WHERE user='nextcloud'" 2> /dev/null)
+        auth_second=$(auth_run)
+        docker rm -f nc-contract-mysql > /dev/null
+        docker network rm "${mysql_net}" > /dev/null
+        rm -f "${auth_config}"
+        if [[ "${auth_first}" == *"warning: MySQL 8.4"*"mysql_native_password"*"ALTER USER 'nextcloud'@'%' IDENTIFIED WITH caching_sha2_password"* \
+            && "${auth_plugin}" == caching_sha2_password && "${auth_second}" == *"the account nextcloud logs in with caching_sha2_password"* ]]; then
+            _pass "${image}_mysql_account_on_mysql_native_password_is_reported"
+            _pass "${image}_mysql_login_with_caching_sha2_password_without_tls"
+        else
+            _fail "${image}_mysql_account_on_mysql_native_password" "plugin '${auth_plugin}' after ALTER USER, first run: ${auth_first}, second run: ${auth_second}"
+        fi
         # The image carries its health check as default, so a stack without a
         # healthcheck block in its compose file gets it too; it runs php
         # directly, the image has no shell. A start period of 60 minutes covers
@@ -254,6 +329,15 @@ for image in "$@"; do
             _fail "${image}_healthcheck_unhealthy_without_fpm" "health.php reports healthy while php-fpm does not run"
         else
             _pass "${image}_healthcheck_unhealthy_without_fpm"
+        fi
+    fi
+    if [[ "${image}" == *:notify-push* ]]; then
+        # The push server of Client Push is the release binary of notify_push
+        # for the architecture of the image, and it runs without a shell.
+        if grep -q 'notify_push' <<< "$(docker run --rm --pull=never "${image}" --help 2>&1)"; then
+            _pass "${image}_runs"
+        else
+            _fail "${image}_runs" "$(docker run --rm --pull=never "${image}" --help 2>&1 | head -3)"
         fi
     fi
 done

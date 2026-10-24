@@ -9,7 +9,9 @@ RUN gpgv --keyring /tmp/nextcloud.gpg /tmp/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE
 RUN tar xf /tmp/${SOURCE_FILE} --strip-components=1
 # browser files: nginx delivers its own copy, php-fpm only checks that they
 # exist; sign-release.php signs the release again afterwards
-RUN find . -name '*.map' -delete
+# map-test.js.map stays: the setup check of the admin overview links to it
+# with linkTo(), which builds the right address only for a file that exists
+RUN find . -name '*.map' ! -path './apps/settings/js/map-test.js.map' -delete
 RUN find . -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.css' \) -exec sh -c ': > "$1"' _ {} \;
 RUN mkdir -p data
 USER root
@@ -34,6 +36,14 @@ ENV UPLOAD_MAX_FILESIZE "8G"
 ENV MAX_INPUT_TIME "3600"
 ENV MAX_REQUEST_WORKERS "100"
 ENV WAIT_SECONDS_FOR_MYSQL "300"
+# proxies whose X-Forwarded-For Nextcloud trusts; empty means the private
+# networks 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+ENV TRUSTED_PROXIES ""
+# largest size of /app/data/nextcloud.log before log-follow.php empties it
+ENV LOG_MAX_SIZE "100M"
+# Redis for file locking and the shared cache; empty means none
+ENV REDIS_HOST ""
+ENV REDIS_PORT "6379"
 ENV ADMIN_USER "admin"
 ENV ADMIN_PWD ""
 # HOST and URL are the same setting, HOST wins; empty both means localhost:8824
@@ -58,6 +68,12 @@ COPY custom.config.php /app/config/custom.config.php
 COPY custom.config.php /usr/local/share/nextcloud/custom.config.php
 COPY --chmod=755 office-bootstrap.php /usr/local/bin/office-bootstrap.php
 COPY --chmod=644 cron.php /usr/local/bin/cron.php
+COPY --chmod=644 row-format.php /usr/local/bin/row-format.php
+COPY --chmod=644 db-auth.php /usr/local/bin/db-auth.php
+COPY --chmod=644 log-follow.php /usr/local/bin/log-follow.php
+COPY --chmod=644 setup-checks.php /usr/local/bin/setup-checks.php
+COPY --chmod=644 talk-signaling.php /usr/local/bin/talk-signaling.php
+COPY --chmod=644 theming-appdata.php /usr/local/bin/theming-appdata.php
 # replaces the ping check of mwaeckerlin/php-fpm and uses its FastCGI client
 # /usr/local/bin/fastcgi.php
 COPY --chmod=644 health.php /usr/local/bin/health.php

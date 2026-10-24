@@ -5,6 +5,7 @@ FROM mcr.microsoft.com/playwright/python:latest
 RUN pip install --no-cache-dir playwright
 RUN playwright install chromium
 COPY --chown=pwuser:pwuser office_test.py /work/office_test.py
+COPY --chown=pwuser:pwuser admin_pages_test.py /work/admin_pages_test.py
 WORKDIR /work
 USER pwuser
 ENTRYPOINT ["python3", "/work/office_test.py"]
