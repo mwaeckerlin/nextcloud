@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-24 **1.1.14**
+    - The image `mwaeckerlin/nextcloud:notify-push` is published: `npm run deploy` left it out, so the workflow found it under no architecture tag and stopped before it published the image.
+
 - 2026-10-24 **1.1.13**
     - The compose setup and the example run MariaDB 11.8, the newest version Nextcloud 33 to 35 support; the tag `mariadb` without a version now delivers MariaDB 13, about which the admin overview warns.
 

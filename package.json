@@ -1,13 +1,13 @@
 {
   "name": "@mwaeckerlin/nextcloud",
-  "version": "1.1.13",
+  "version": "1.1.14",
   "scripts": {
     "build": "docker compose build",
     "start": "docker compose up --build --force-recreate --remove-orphans",
     "start:daemon": "docker compose up -d --build --force-recreate --remove-orphans",
     "start:dev": "docker compose up --build --force-recreate --remove-orphans",
     "stop": "docker compose down",
-    "deploy": "docker compose push nextcloud-nginx nextcloud-php-fpm",
+    "deploy": "docker compose push nextcloud-nginx nextcloud-php-fpm notify-push",
     "test:e2e": "./tests/e2e/run-compose-e2e.sh",
     "test:contract": "bash tests/image-contract.sh mwaeckerlin/nextcloud:nginx mwaeckerlin/nextcloud:php-fpm mwaeckerlin/nextcloud:notify-push",
     "test:image": "npm run build && npm run test:contract",
