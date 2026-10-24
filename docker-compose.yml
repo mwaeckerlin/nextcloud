@@ -102,7 +102,9 @@ services:
       - php-collabora
 
   nextcloud-db:
-    image: mariadb
+    # the newest MariaDB that Nextcloud 33 to 35 support; with a newer one
+    # the admin overview warns about the database version
+    image: mariadb:11.8
     # 96M of the image are below the 128M the database checks of the admin
     # overview ask for; 256M is the value they recommend
     command: --innodb-log-file-size=256M

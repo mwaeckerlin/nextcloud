@@ -96,7 +96,7 @@ services:
       traefik-nginx:
 
   nextcloud-db:
-    image: mariadb
+    image: mariadb:11.8
     environment:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
