@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# the workflow passes the commit of the push, so the branches carry exactly
+# that commit and not what origin points at when the script runs
+BASE_COMMIT="${BASE_COMMIT:-origin/master}"
 git checkout master
 git pull
 for i in {30..35}; do
@@ -9,7 +12,7 @@ for i in {30..35}; do
     fi
     git checkout $i 2>/dev/null || git checkout -b $i
     git fetch origin $i
-    git reset --hard origin/master
+    git reset --hard "$BASE_COMMIT"
     sed -i 's/ARG VERSION=".*"/ARG VERSION="'$VERSION'"/g' Dockerfile
     sed -i 's/ENV SOURCE_FILE="latest.*"/ENV SOURCE_FILE="latest-'$i'.tar.bz2"/g' Dockerfile
     date > rebuilt

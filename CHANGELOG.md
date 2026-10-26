@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-26 **1.0.3**
+    - Every published version carries a leading `v`: `master` publishes `latest`, `v1.0.3` and both with the date, the branches `30` to `35` `35`, `35-v1.0.3` and both with the date. The tags `1.0.2`, `35-1.0.2` and their like stay published.
+    - A push to `master` rebuilds `30` to `35` from the pushed commit, so every Nextcloud major version of the legacy image publishes the version just pushed.
+
 - 2026-10-21 **1.0.2**
     - PHP runs with session upload progress off, locked against `.htaccess`: the mitigation the advisory of CVE-2026-109619 names for Apache `mod_php`, where both PHP vulnerabilities of 21 October allow remote code execution; the complete fix is the PHP update of Ubuntu
 
