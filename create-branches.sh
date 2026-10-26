@@ -6,6 +6,9 @@ BASE_BRANCH="${BASE_BRANCH:-new}"
 # branches new-30 to new-32 stay frozen and are not rebuilt from here
 START_VERSION="${START_VERSION:-33}"
 END_VERSION="${END_VERSION:-35}"
+# the workflow passes the commit of the push, so the branches carry exactly
+# that commit and not what origin points at when the script runs
+BASE_COMMIT="${BASE_COMMIT:-origin/$BASE_BRANCH}"
 
 if [[ "$#" -gt 0 ]]; then
     VERSIONS=("$@")
@@ -24,7 +27,7 @@ for version in "${VERSIONS[@]}"; do
     branch="new-$version"
     source_file="latest-${version}.tar.bz2"
 
-    git checkout -B "$branch" "origin/$BASE_BRANCH"
+    git checkout -B "$branch" "$BASE_COMMIT"
 
     sed -Ei "s|^ARG SOURCE_FILE=.*$|ARG SOURCE_FILE=\"${source_file}\"|" php-fpm/Dockerfile
     sed -Ei "s|^ARG SOURCE_FILE=.*$|ARG SOURCE_FILE=\"${source_file}\"|" nginx/Dockerfile

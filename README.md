@@ -423,7 +423,7 @@ Complete and secure `docker-compose.yml`:
 ```yaml
 services:
   nextcloud-nginx:
-    image: mwaeckerlin/nextcloud:nginx
+    image: mwaeckerlin/nextcloud:nginx-v1.1.15
     environment:
       WEBROOT:
       MAX_INPUT_TIME: 3600
@@ -439,7 +439,7 @@ services:
       - collabora-network
 
   nextcloud-php-fpm:
-    image: mwaeckerlin/nextcloud:php-fpm
+    image: mwaeckerlin/nextcloud:php-fpm-v1.1.15
     environment:
       HOST: localhost:8824
       PROTOCOL: http
@@ -655,18 +655,27 @@ Every tag is built from a branch of this repository:
 
 | Tag | Branch | Content |
 |-----|--------|---------|
-| `nginx`, `php-fpm` | `new` | the current Nextcloud release |
-| `nginx-NN`, `php-fpm-NN` | `new-NN` | Nextcloud major version `NN` |
+| `nginx`, `php-fpm`, `notify-push` | `new` | the current Nextcloud release |
+| `nginx-ncNN`, `php-fpm-ncNN`, `notify-push-ncNN` | `new-NN` | Nextcloud major version `NN` |
 | `latest` | `master` | legacy: single Apache image |
 | `NN` | `NN` | legacy: single Apache image with Nextcloud major version `NN` |
 
-Each of these tags is also published with the day of the build and, where the branch carries a version in `package.json`, with that version: branch `new-33` publishes `nginx-33`, `nginx-33-20261002`, `nginx-33-1.1.2` and `nginx-33-1.1.2-20261002`. A rebuild of the same version therefore stays addressable by its date.
+Each of these tags is also published with the day of the build and with the version of `package.json`, which always carries a leading `v`. Branch `new-35` with version 1.1.15 publishes:
 
-An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-NN` and `php-fpm-NN` and steps through the versions. The test of every version branch checks that its `php-fpm` image carries exactly Nextcloud `NN`.
+| Tag | Content |
+| --- | --- |
+| `nginx-nc35` | the last build of Nextcloud 35 |
+| `nginx-nc35-20261026` | the build of that day |
+| `nginx-nc35-v1.1.15` | version 1.1.15 of these images with Nextcloud 35 |
+| `nginx-nc35-v1.1.15-20261026` | that version, built that day |
 
-The GitHub workflow `.github/workflows/docker.yml` builds, tests and publishes the images for amd64 and arm64, on every push to a live branch and every Monday at 06:17 UTC, one hour after the rebuild of `mwaeckerlin/nginx` and `mwaeckerlin/php-fpm`. It calls the shared workflow of [mwaeckerlin/scratch](https://github.com/mwaeckerlin/scratch#publishing-on-docker-hub), which also describes the secret `DOCKERHUB_TOKEN` it needs. The same file stands on every live branch: `new`, `new-33` to `new-35`, `master` and `30` to `35`. `create-branches.sh` creates the version branches of each line from its base branch.
+Branch `new` publishes the same without `ncNN`: `nginx`, `nginx-20261026`, `nginx-v1.1.15` and `nginx-v1.1.15-20261026`; `master` publishes `latest`, `20261026`, `v1.0.1` and `v1.0.1-20261026`. A rebuild of the same version therefore stays addressable by its date. The tags `nginx-33` to `nginx-35` and `php-fpm-33` to `php-fpm-35` of earlier versions stay published as they were and are no longer rebuilt.
 
-The branches `13` to `29` and `new-30` to `new-32` are frozen: nothing builds them any more, and their tags stay as published. Nextcloud 30 to 32 refuse PHP 8.5, and `mwaeckerlin/php-fpm` carries only the current PHP of Alpine, so `nginx-30` to `nginx-32` and `php-fpm-30` to `php-fpm-32` cannot install Nextcloud. An installation of the legacy image on Nextcloud 30 to 32 upgrades over the legacy tags `30` to `35`, which run on the PHP of Ubuntu `noble` and `jammy`.
+An installation upgrades one Nextcloud major version at a time, so a deployment pins `nginx-ncNN` and `php-fpm-ncNN`, or `nginx-ncNN-vX.Y.Z` for a fixed version, and steps through the major versions. The test of every version branch checks that its `php-fpm` image carries exactly Nextcloud `NN`.
+
+The GitHub workflow `.github/workflows/docker.yml` builds, tests and publishes the images for amd64 and arm64, on every push to a live branch, and in the hourly check when a parent image or a download changed or the image is a week old. It calls the shared workflow of [mwaeckerlin/scratch](https://github.com/mwaeckerlin/scratch#publishing-on-docker-hub), which also describes the secret `DOCKERHUB_TOKEN` it needs. The same file stands on every live branch: `new`, `new-33` to `new-35`, `master` and `30` to `35`. A push to `new` also rebuilds every Nextcloud major version: once the images of `new` are published, the workflow runs `create-branches.sh` on the pushed commit, which creates `new-33` to `new-35` from it with their `SOURCE_FILE` and pushes them, and builds each of them, so `nginx-nc33-v1.1.15` to `nginx-nc35-v1.1.15` carry the same version as `nginx-v1.1.15`. Run by hand, `create-branches.sh` creates the version branches from `origin/new`.
+
+The branches `13` to `29` and `new-30` to `new-32` are frozen: nothing builds them any more, and their tags stay as published. Nextcloud 30 to 32 refuse PHP 8.5, and `mwaeckerlin/php-fpm` carries only the current PHP of Alpine, so their images cannot install Nextcloud. An installation of the legacy image on Nextcloud 30 to 32 upgrades over the legacy tags `30` to `35`, which run on the PHP of Ubuntu `noble` and `jammy`.
 
 ### Legacy image
 

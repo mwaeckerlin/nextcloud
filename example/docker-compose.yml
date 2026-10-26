@@ -31,7 +31,7 @@ services:
     restart: unless-stopped
 
   nextcloud-nginx:
-    image: mwaeckerlin/nextcloud:nginx
+    image: mwaeckerlin/nextcloud:nginx-v1.1.15
     environment:
       WEBROOT:
       MAX_INPUT_TIME: ${MAX_INPUT_TIME:-3600}
@@ -46,7 +46,7 @@ services:
       - traefik-nginx
 
   nextcloud-php-fpm:
-    image: mwaeckerlin/nextcloud:php-fpm
+    image: mwaeckerlin/nextcloud:php-fpm-v1.1.15
     environment:
       HOST: ${HOST}
       PROTOCOL: ${PROTOCOL:-https}

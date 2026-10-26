@@ -1,5 +1,10 @@
 # Changelog
 
+- 2026-10-26 **1.1.15**
+    - Every published version carries a leading `v`, and the images of a Nextcloud major version carry `nc` before it: branch `new-35` publishes `nginx-nc35`, `nginx-nc35-v1.1.15` and both with the date, branch `new` `nginx`, `nginx-v1.1.15` and both with the date, `master` `latest`, `v1.0.1` and both with the date. The tags `nginx-35`, `nginx-35-1.1.14` and their like stay published and are no longer rebuilt.
+    - A push to `new` rebuilds `new-33` to `new-35` from the pushed commit, so every Nextcloud major version publishes the version just pushed; until now only the hourly check started them, with the code of their last regeneration.
+    - The examples pin the version of the images without the Nextcloud major version: `mwaeckerlin/nextcloud:nginx-v1.1.15` and `php-fpm-v1.1.15`.
+
 - 2026-10-24 **1.1.14**
     - The image `mwaeckerlin/nextcloud:notify-push` is published: `npm run deploy` left it out, so the workflow found it under no architecture tag and stopped before it published the image.
 
