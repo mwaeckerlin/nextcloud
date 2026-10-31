@@ -4,15 +4,17 @@
 The scheduled run of the default branch starts `docker.yml` on every branch a
 rule of `branch-tags` matches (shared workflow of mwaeckerlin/scratch, matched
 in full with Python's re.fullmatch). Nextcloud 30 to 32 refuse PHP 8.5, which
-is the only PHP mwaeckerlin/php-fpm carries, so the branches new-30 to new-32
-must stay frozen like 13 to 29; every other version branch must be built.
+is the only PHP mwaeckerlin/php-fpm carries, and Nextcloud 13 to 23 refuse
+every PHP above 8.0, so the branches new-30 to new-32 and 13 to 23 must stay
+frozen; every other version branch must be built, so its image gets the PHP
+fixes of its Ubuntu release.
 Branch new-NN publishes nginx-ncNN and nginx-ncNN-vX.Y.Z, branch new nginx
 and nginx-vX.Y.Z, each also with the day of the build; no tag carries a
 version without its leading «v».
 The script `deploy` of package.json must push every image the compose file
 builds.
 """
-import json, pathlib, re, subprocess, sys
+import fnmatch, json, pathlib, re, subprocess, sys
 
 root = pathlib.Path(__file__).resolve().parent.parent
 # another workflow file as argument checks its rules, such as the one of an
@@ -42,8 +44,8 @@ def tags(branch, tag, version='1.2.3', date='20261026'):
     named = named_version if base == 'latest' else f'{base}-{named_version}'
     return [base, date if base == 'latest' else f'{base}-{date}', named, f'{named}-{date}']
 
-built = {'new': '', **{f'new-{v}': f'-nc{v}' for v in range(33, 36)}, 'master': '', **{str(v): f'-{v}' for v in range(30, 36)}}
-frozen = [f'new-{v}' for v in range(30, 33)] + [str(v) for v in range(13, 30)]
+built = {'new': '', **{f'new-{v}': f'-nc{v}' for v in range(33, 36)}, 'master': '', **{str(v): f'-{v}' for v in range(24, 36)}}
+frozen = [f'new-{v}' for v in range(30, 33)] + [str(v) for v in range(13, 24)]
 # a version never stands without its leading «v»: nginx-v1.2.3, nginx-nc35-v1.2.3
 expected_tags = {
     'new': ['nginx', 'nginx-20261026', 'nginx-v1.2.3', 'nginx-v1.2.3-20261026'],
@@ -68,6 +70,14 @@ for branch in built:
     ok = not got
     failed += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  {branch} publishes no version without «v»" + ('' if ok else f': {" ".join(got)}'))
+# a push to a built branch starts the workflow on it: `on.push.branches`
+# lists glob patterns, which fnmatch reads the same way for these names
+push = next(l for l in workflow.read_text().splitlines() if l.strip().startswith('branches:'))
+patterns = [p.strip().strip('"') for p in push.split(':', 1)[1].strip().strip('[]').split(',')]
+for branch in built:
+    ok = any(fnmatch.fnmatchcase(branch, p) for p in patterns)
+    failed += not ok
+    print(f"  {'PASS' if ok else 'FAIL'}  a push to {branch} starts the workflow" + ('' if ok else f', on.push.branches is {patterns}'))
 for branch in frozen:
     got = suffix(branch)
     ok = got is None
@@ -84,6 +94,6 @@ for name in images:
     ok = name in pushed
     failed += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  deploy pushes {name}")
-total = 2 * len(built) + len(expected_tags) + len(frozen) + len(images)
+total = 3 * len(built) + len(expected_tags) + len(frozen) + len(images)
 print(f'==> Branch contract: {total - failed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

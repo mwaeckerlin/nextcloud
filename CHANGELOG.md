@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-31 **1.0.4**
+    - The tags `24` to `29` are built again, on Ubuntu jammy, and get every PHP fix of Ubuntu like `30` to `35`, among them the fix of CVE-2026-109618 and CVE-2026-109619. Until now `25` to `29` carried PHP 8.1.2-1ubuntu2.23, and `24` carried the PHP 8.3 of noble, on which Nextcloud 24 does not start.
+    - The tags `13` to `23` stay as published: Nextcloud 13 to 23 refuse every PHP above 8.0, which no Ubuntu release with security updates carries.
+
 - 2026-10-26 **1.0.3**
     - Every published version carries a leading `v`: `master` publishes `latest`, `v1.0.3` and both with the date, the branches `30` to `35` `35`, `35-v1.0.3` and both with the date. The tags `1.0.2`, `35-1.0.2` and their like stay published.
     - A push to `master` rebuilds `30` to `35` from the pushed commit, so every Nextcloud major version of the legacy image publishes the version just pushed.
