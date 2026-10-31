@@ -54,6 +54,29 @@ with sync_playwright() as playwright:
     page.click('button[type="submit"]')
     page.wait_for_url(lambda url: '/login' not in url, timeout=60_000)
 
+    # Nextcloud 30 and 31 greet the first login of a user with the first-run
+    # wizard over the whole page, which takes every click. Its own close button
+    # is hidden, so the user closes it with Escape, and the wizard stores that
+    # it was seen; this happens before Collabora takes the keyboard focus
+    try:
+        page.wait_for_selector('#firstrunwizard', state='visible', timeout=15_000)
+    except Exception:
+        pass
+    else:
+        page.locator('#firstrunwizard').focus()
+        page.keyboard.press('Escape')
+        try:
+            page.wait_for_selector('#firstrunwizard', state='detached', timeout=15_000)
+        except Exception:
+            # the route the close of the wizard calls, then the page again
+            status = page.evaluate("""async () => (await fetch(OC.generateUrl('/apps/firstrunwizard/wizard'),
+                {method: 'DELETE', headers: {requesttoken: OC.requestToken}})).status""")
+            print(f'office: the first-run wizard did not close on Escape; its close route answered {status}')
+            page.reload(wait_until='domcontentloaded')
+            page.wait_for_timeout(5000)
+            if page.locator('#firstrunwizard').is_visible():
+                fail(page, 'the first-run wizard of Nextcloud stays open after Escape and its close route')
+
     # the page loads Collabora into an iframe, so its load event can take
     # long; the frame is awaited below
     try:
@@ -90,18 +113,6 @@ with sync_playwright() as playwright:
         frame.wait_for_selector('#modal-dialog-onboarding-tour-overlay', state='detached', timeout=10_000)
     except Exception:
         pass
-    # Nextcloud 30 and 31 greet the first login of a user with the first-run wizard
-    # over the whole page, which takes every click; close it as the user would
-    try:
-        page.wait_for_selector('#firstrunwizard', state='visible', timeout=10_000)
-    except Exception:
-        pass
-    else:
-        try:
-            page.click('#firstrunwizard button.modal-container__close', timeout=5_000)
-        except Exception:
-            page.keyboard.press('Escape')
-        page.wait_for_selector('#firstrunwizard', state='detached', timeout=10_000)
     page.wait_for_timeout(2000)
     canvas.click()
     page.keyboard.type(TEXT, delay=50)

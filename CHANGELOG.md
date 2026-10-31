@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.23**
+    - The office test of Nextcloud 30 and 31 closes the first-run wizard right after the login with Escape, as its own close button is hidden; 1.1.22 looked for that button after Collabora had taken the keyboard focus, and the wizard stayed open.
+
 - 2026-10-31 **1.1.22**
     - A new installation enables the shipped app `twofactor_totp`, as Nextcloud does from 33 on, so the admin overview of Nextcloud 30 to 32 no longer warns that no second factor provider is available; two-factor authentication stays optional.
     - The office test of Nextcloud 30 and 31 closes the first-run wizard, which covers the page at the first login, before it types into the document.
