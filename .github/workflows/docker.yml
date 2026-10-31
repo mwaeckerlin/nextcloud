@@ -9,13 +9,14 @@
 #   new-NN   -> nginx-ncNN, php-fpm-ncNN       (major version NN, from 33)
 #   master   -> latest                         (legacy single image)
 #   NN       -> NN                             (legacy, major version NN)
-# A push to master also rebuilds 24 to 35: once its image is deployed, the
+# A push to master also rebuilds 13 to 35: once its image is deployed, the
 # shared workflow runs create-branches.sh on the pushed commit and builds
 # every branch it pushed, so each major version publishes the version just
-# pushed; that push needs «contents: write».
-# The branches 13 to 23 and new-30 to new-32 are frozen: their tags stay as
-# published. Nextcloud 13 to 23 refuse every PHP above 8.0, and no Ubuntu
-# release with security updates carries one. Nextcloud 30 to 32 refuse
+# pushed; that push needs «contents: write». Nextcloud 13 to 23 refuse every
+# PHP above 8.0, so their tags carry the patched PHP of jammy and Nextcloud
+# does not start in them.
+# The branches new-30 to new-32 are frozen: their tags stay as
+# published. Nextcloud 30 to 32 refuse
 # PHP 8.5, the only PHP of mwaeckerlin/php-fpm; installations on them upgrade
 # over the legacy tags.
 #
@@ -28,7 +29,7 @@ name: docker
 
 on:
   push:
-    branches: [master, new, "new-*", "2[4-9]", "3[0-9]"]
+    branches: [master, new, "new-*", "1[3-9]", "2[0-9]", "3[0-9]"]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -53,5 +54,5 @@ jobs:
       architectures: '["amd64"]'
       version-base: master
       version-branches: ./create-branches.sh
-      branch-tags: '[{"branch": "new-(3[3-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(2[4-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
+      branch-tags: '[{"branch": "new-(3[3-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(1[3-9]|2[0-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
     secrets: inherit

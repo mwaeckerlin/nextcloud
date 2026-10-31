@@ -5,9 +5,9 @@
 BASE_COMMIT="${BASE_COMMIT:-origin/master}"
 git checkout master
 git pull
-# Nextcloud 24 runs on the PHP 8.1 of jammy; 13 to 23 refuse every PHP above
-# 8.0, so their branches stay frozen
-for i in {24..35}; do
+# every branch gets the PHP fixes of its Ubuntu release; Nextcloud 13 to 23
+# refuse the PHP 8.1 of jammy and do not start
+for i in {13..35}; do
     export VERSION=noble
     if [ $i -lt 31 ]; then
         export VERSION=jammy
