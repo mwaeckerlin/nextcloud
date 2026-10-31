@@ -28,11 +28,17 @@ if (!in_array($connection->getDatabaseProvider(), ['mysql', 'mariadb'], true)) {
 }
 
 // the query of the setup check MysqlRowFormat, so both see the same tables
-$tables = $connection->executeQuery(
+$result = $connection->executeQuery(
     "SELECT table_name FROM information_schema.tables
         WHERE table_schema = ? AND table_name LIKE '*PREFIX*%' AND row_format != 'Dynamic'",
     [Server::get(IConfig::class)->getSystemValueString('dbname')],
-)->fetchFirstColumn();
+);
+// fetchOne() row by row: the result of Nextcloud 30 to 32 has no fetchFirstColumn()
+$tables = [];
+while (($table = $result->fetchOne()) !== false) {
+    $tables[] = (string) $table;
+}
+$result->closeCursor();
 if ($tables === []) {
     exit(0);
 }

@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.20**
+    - Nextcloud 30 to 32 convert tables in an old row format at the start: the conversion read its list of tables with a call Nextcloud has from 33 on, stopped with an error, and the admin overview then warned about that error in the log.
+
 - 2026-10-31 **1.1.19**
     - Nextcloud 30 and 31 convert tables in an old row format at the start as well; the conversion asked Nextcloud for a name of MariaDB that it knows from Nextcloud 32 on and stopped there.
 
