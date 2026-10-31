@@ -22,7 +22,8 @@ function logMessage(string $message): void
 }
 
 $connection = Server::get(IDBConnection::class);
-if (!in_array($connection->getDatabaseProvider(), [IDBConnection::PLATFORM_MYSQL, IDBConnection::PLATFORM_MARIADB], true)) {
+// the values of PLATFORM_MYSQL and PLATFORM_MARIADB; Nextcloud 30 and 31 have no PLATFORM_MARIADB
+if (!in_array($connection->getDatabaseProvider(), ['mysql', 'mariadb'], true)) {
     exit(0);
 }
 

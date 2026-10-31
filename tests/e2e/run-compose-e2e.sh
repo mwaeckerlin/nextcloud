@@ -380,6 +380,8 @@ while :; do
   INDEX=$(db "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='nextcloud' AND table_name='oc_share' AND index_name='share_with_index'")
   [[ "$ROW_FORMAT" == "Dynamic" && "$INDEX" != "0" ]] && break
   if (( $(date +%s) > deadline )); then
+    # the health checks fill the tail, so the lines of the start and the cron loop come first
+    grep -E 'nextcloud-[a-z-]+:|PHP (Fatal|Warning|Parse)|Error' <<<"$(docker compose logs nextcloud-php-fpm)" | tail -n 60 >&2 || true
     docker compose logs --tail=30 nextcloud-php-fpm >&2 || true
     fail "after the start oc_appconfig is '$ROW_FORMAT' and share_with_index has $INDEX columns"
   fi

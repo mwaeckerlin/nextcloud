@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.19**
+    - Nextcloud 30 and 31 convert tables in an old row format at the start as well; the conversion asked Nextcloud for a name of MariaDB that it knows from Nextcloud 32 on and stopped there.
+
 - 2026-10-31 **1.1.18**
     - `nginx-nc30` to `nginx-nc32` and `php-fpm-nc30` to `php-fpm-nc32` are published: the test of 1.1.17 expected `fatal_error_backtraces` locked off in the pool, a setting PHP has from 8.5 on only, and stopped Nextcloud 30 to 32 before publication.
 
