@@ -1,6 +1,6 @@
 {
   "name": "@mwaeckerlin/nextcloud",
-  "version": "1.1.24",
+  "version": "1.1.25",
   "scripts": {
     "build": "docker compose build",
     "start": "docker compose up --build --force-recreate --remove-orphans",
@@ -12,6 +12,7 @@
     "test:contract": "bash tests/image-contract.sh mwaeckerlin/nextcloud:nginx mwaeckerlin/nextcloud:php-fpm mwaeckerlin/nextcloud:notify-push",
     "test:image": "npm run build && npm run test:contract",
     "test:branches": "python3 tests/branch-rules.py",
-    "test": "npm run test:branches && npm run test:image && npm run test:e2e"
+    "test:log-filter": "python3 tests/e2e/known-log-errors.py --self-test",
+    "test": "npm run test:branches && npm run test:log-filter && npm run test:image && npm run test:e2e"
   }
 }

@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.25**
+    - The test of Nextcloud 31 converts an office file to a preview itself, so the error richdocuments 31 writes into the log on every such preview appears on every run; the warning «Errors in the log» counts as known only while every error in the log is that one, and the test prints the entries it found.
+
 - 2026-10-31 **1.1.24**
     - The test of the administration pages accepts the note «The version you are running is not maintained anymore», which the update server of Nextcloud gives Nextcloud 30 and 31; the images of 30 and 31 are published with it.
 

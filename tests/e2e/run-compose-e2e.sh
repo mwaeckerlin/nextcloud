@@ -628,6 +628,56 @@ if [[ "$OFFICE_EXIT" != 0 ]]; then
 fi
 docker rm -f e2e-office-browser >/dev/null 2>&1 || true
 
+# --- The preview of an office file, which richdocuments converts in Collabora.
+# richdocuments of the Nextcloud 31 line logs a TypeError on every such
+# conversion (fclose() in RemoteService.php line 71; nextcloud/richdocuments
+# issue #5743, fixed in 02f87c2a9c, no backport to stable31). The test
+# converts a fresh copy itself, so the entry is in the log on every run of 31.
+echo "[E2E] Converting an office file to a preview"
+PREVIEW_DOC="e2e-preview-test.odt"
+nc_curl --fail -u "${ADMIN_USER}:${ADMIN_PASS}" -X COPY \
+  -H "Destination: ${DAV_PUBLIC_BASE}/${PREVIEW_DOC}" \
+  "${DAV_PUBLIC_BASE}/${TEST_DOC}" >/dev/null \
+  || fail "WebDAV copy of the test document for the preview failed"
+PREVIEW_ID=$(nc_curl -u "${ADMIN_USER}:${ADMIN_PASS}" -X PROPFIND \
+  -H 'Depth: 0' \
+  -H 'Content-Type: application/xml' \
+  --data '<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' \
+  "${DAV_PUBLIC_BASE}/${PREVIEW_DOC}" \
+  | grep -oE '<oc:fileid>[0-9]+</oc:fileid>' \
+  | grep -oE '[0-9]+' \
+  | head -n1)
+[[ -n "$PREVIEW_ID" ]] || fail "Could not determine the fileid of ${PREVIEW_DOC}"
+PREVIEW_STATUS=$(nc_curl -o /dev/null -w '%{http_code}' -u "${ADMIN_USER}:${ADMIN_PASS}" \
+  "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/index.php/core/preview?fileId=${PREVIEW_ID}&x=256&y=256&a=1" || true)
+echo "[E2E] the preview of ${PREVIEW_DOC} answered ${PREVIEW_STATUS}"
+
+# The admin overview warns «Errors in the log» for every error entry. The
+# warning counts as known only while every error and fatal entry of
+# nextcloud.log is that fclose() of richdocuments, on Nextcloud 31, and the
+# installed RemoteService.php still carries the fclose() in line 71;
+# known-log-errors.py decides and prints the entries it found.
+NC_MAJOR=$(docker compose exec -T nextcloud-php-fpm php -r 'include "/app/version.php"; echo $OC_Version[0];')
+RD_LINE=$(docker compose exec -T nextcloud-php-fpm php -r '$f = @file("/app/custom_apps/richdocuments/lib/Service/RemoteService.php"); echo trim($f[70] ?? "");')
+RD_UNFIXED=no
+[[ "$RD_LINE" == 'fclose($stream);' ]] && RD_UNFIXED=yes
+known_log_errors() {
+  docker compose exec -T nextcloud-php-fpm php -r 'readfile("/app/data/nextcloud.log");' \
+    | python3 tests/e2e/known-log-errors.py --major "$NC_MAJOR" --unfixed "$RD_UNFIXED"
+}
+LOG_ALLOWED=""
+LOG_TASK=""
+if [[ "$NC_MAJOR" == 31 && "$RD_UNFIXED" == yes ]]; then
+  echo "[E2E] Nextcloud ${NC_MAJOR}, richdocuments without the fix: the errors of nextcloud.log"
+  KNOWN_EXIT=0
+  known_log_errors || KNOWN_EXIT=$?
+  [[ "$KNOWN_EXIT" == 0 ]] \
+    || fail "nextcloud.log does not hold exactly the known error of richdocuments after the preview (exit ${KNOWN_EXIT})"
+  # the text of the card of the warning: «2 errors in the logs since …»
+  LOG_ALLOWED='|in the logs since'
+  LOG_TASK=$'\nOCA\\LogReader\\SetupChecks\\LogErrors'
+fi
+
 # --- The administration pages in a real browser: every warning and error they
 # show fails the test, except the AppAPI deploy daemon the README leaves to
 # the administrator, and two texts Nextcloud shows as a warning card whatever
@@ -641,7 +691,7 @@ ADMIN_EXIT=0
 docker compose run --name e2e-admin-browser --entrypoint python3 \
   -e NC_URL="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}" \
   -e NC_USER="${ADMIN_USER}" -e NC_PASSWORD="${ADMIN_PASS}" \
-  -e ALLOWED="AppAPI|Enabling PDF scripting|do not support end-to-end encrypted calls|The version you are running is not maintained anymore" \
+  -e ALLOWED="AppAPI|Enabling PDF scripting|do not support end-to-end encrypted calls|The version you are running is not maintained anymore${LOG_ALLOWED}" \
   office-browser /work/admin_pages_test.py || ADMIN_EXIT=$?
 if [[ "$ADMIN_EXIT" != 0 ]]; then
   docker cp e2e-admin-browser:/tmp/admin-pages-failure.png "${HOST_TMP}/admin-pages-failure.png" >/dev/null 2>&1 \
@@ -729,7 +779,14 @@ echo "[E2E] Checking the setup checks of the admin overview"
 ADMIN_TASKS='OCA\AppAPI\SetupChecks\DaemonCheck
 OCA\Settings\SetupChecks\HttpsUrlGeneration
 OCA\Settings\SetupChecks\SecurityHeaders|Strict-Transport-Security
-OCA\Talk\SetupCheck\HighPerformanceBackend|missing features: changed-users'
+OCA\Talk\SetupCheck\HighPerformanceBackend|missing features: changed-users'"${LOG_TASK}"
+# the log is read once more here: an error entry since the preview that is not
+# the known one leaves the warning standing
+if [[ -n "$LOG_TASK" ]]; then
+  KNOWN_EXIT=0
+  known_log_errors || KNOWN_EXIT=$?
+  [[ "$KNOWN_EXIT" == 0 ]] || ADMIN_TASKS=${ADMIN_TASKS%"$LOG_TASK"}
+fi
 SETUP=$(nc_curl -u "${ADMIN_USER}:${ADMIN_PASS}" -H 'OCS-APIRequest: true' -H 'X-Forwarded-For: 203.0.113.9' \
   "${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}/index.php/settings/setupcheck") \
   || fail "the setup checks of the admin overview do not answer"
