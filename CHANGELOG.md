@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.18**
+    - `nginx-nc30` to `nginx-nc32` and `php-fpm-nc30` to `php-fpm-nc32` are published: the test of 1.1.17 expected `fatal_error_backtraces` locked off in the pool, a setting PHP has from 8.5 on only, and stopped Nextcloud 30 to 32 before publication.
+
 - 2026-10-31 **1.1.17**
     - Nextcloud 30, 31 and 32 are built, tested and published again, as `nginx-nc30`, `php-fpm-nc30` and `notify-push-nc30` to the same for 32: Nextcloud 30 on PHP 8.3, 31 and 32 on PHP 8.4, the releases of 21 October 2026 that fix CVE-2026-109618 and CVE-2026-109619. The tags `php-fpm-30` to `php-fpm-32` of September carried PHP 8.5.9, on which Nextcloud 30 to 32 never started; they stay published as they were.
     - The compose setup of Nextcloud 30 and 31 runs MariaDB 11.4, the newest they support.

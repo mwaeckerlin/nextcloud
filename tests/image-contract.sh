@@ -183,10 +183,14 @@ for image in "$@"; do
         done
         # CVE-2026-109619: the pool of the base image locks the session
         # upload progress and the fatal error backtraces off, and nothing of
-        # nextcloud turns them back on
+        # nextcloud turns them back on; PHP before 8.5 has no fatal error
+        # backtraces, so the pool of its php-fpm does not name the setting
         pool=$(docker run --rm --pull=never --entrypoint /usr/sbin/php-fpm "${image}" -tt 2>&1)
+        backtraces=$(docker run --rm --pull=never --entrypoint /usr/bin/php "${image}" -r 'echo ini_get("fatal_error_backtraces") === false ? "absent" : "present";' 2>&1)
         for flag in session.upload_progress.enabled fatal_error_backtraces; do
-            if grep -Eq "${flag//./\\.}\] = (off|no|0)" <<< "${pool}"; then
+            if [[ "${flag}" == fatal_error_backtraces && "${backtraces}" == absent ]] && ! grep -q "${flag}" <<< "${pool}"; then
+                _pass "${image}_${flag}_locked (PHP without the setting)"
+            elif grep -Eq "${flag//./\\.}\] = (off|no|0)" <<< "${pool}"; then
                 _pass "${image}_${flag}_locked"
             else
                 _fail "${image}_${flag}_locked" "the pool does not lock ${flag} off"
