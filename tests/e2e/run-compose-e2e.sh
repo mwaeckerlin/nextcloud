@@ -632,14 +632,16 @@ docker rm -f e2e-office-browser >/dev/null 2>&1 || true
 # show fails the test, except the AppAPI deploy daemon the README leaves to
 # the administrator, and two texts Nextcloud shows as a warning card whatever
 # the configuration: the risk of PDF scripting under Basic settings, and that
-# mobile clients make no end-to-end encrypted calls under Talk.
+# mobile clients make no end-to-end encrypted calls under Talk. The overview
+# of a Nextcloud major version past its end of life, 30 and 31 today, says so
+# from the answer of the update server of Nextcloud, which no image changes.
 echo "[E2E] Checking the administration pages in a browser"
 docker rm -f e2e-admin-browser >/dev/null 2>&1 || true
 ADMIN_EXIT=0
 docker compose run --name e2e-admin-browser --entrypoint python3 \
   -e NC_URL="${PROTOCOL_VALUE}://${HOST_VALUE}${WEBROOT_PATH}" \
   -e NC_USER="${ADMIN_USER}" -e NC_PASSWORD="${ADMIN_PASS}" \
-  -e ALLOWED="AppAPI|Enabling PDF scripting|do not support end-to-end encrypted calls" \
+  -e ALLOWED="AppAPI|Enabling PDF scripting|do not support end-to-end encrypted calls|The version you are running is not maintained anymore" \
   office-browser /work/admin_pages_test.py || ADMIN_EXIT=$?
 if [[ "$ADMIN_EXIT" != 0 ]]; then
   docker cp e2e-admin-browser:/tmp/admin-pages-failure.png "${HOST_TMP}/admin-pages-failure.png" >/dev/null 2>&1 \

@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.24**
+    - The test of the administration pages accepts the note «The version you are running is not maintained anymore», which the update server of Nextcloud gives Nextcloud 30 and 31; the images of 30 and 31 are published with it.
+
 - 2026-10-31 **1.1.23**
     - The office test of Nextcloud 30 and 31 closes the first-run wizard right after the login with Escape, as its own close button is hidden; 1.1.22 looked for that button after Collabora had taken the keyboard focus, and the wizard stayed open.
 
