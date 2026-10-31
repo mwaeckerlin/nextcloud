@@ -238,7 +238,7 @@ Nextcloud compares every file of core and of each app with the hashes in `core/s
 3. It signs core and every shipped app with `occ integrity:sign-core` and `occ integrity:sign-app`; a certificate named `core` may sign apps too.
 4. The private keys stay in that build stage; nobody can sign with them afterwards.
 
-The check stays active: `occ integrity:check-core` and `occ integrity:check-app --all` pass, apps from the App Store still verify against the Nextcloud CA, and a changed file is reported.
+The check stays active: `occ integrity:check-core` and `occ integrity:check-app` for every signed app pass, apps from the App Store still verify against the Nextcloud CA, and a changed file is reported.
 
 ### Start and background jobs
 

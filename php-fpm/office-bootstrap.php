@@ -293,6 +293,22 @@ function logOcc(string $step, array $args): int
     return $code;
 }
 
+// Sets a string value of an app. From Nextcloud 33 on, occ confirms the edit of
+// a value the app marks internal with --internal; Nextcloud 30 to 32 refuse the
+// unknown option and set nothing.
+function setAppString(string $app, string $key, string $value): array
+{
+    static $internal = null;
+    if ($internal === null) {
+        $internal = str_contains(runOcc(['config:app:set', '--help', '--no-ansi'])[1], '--internal');
+    }
+    return runOcc(array_merge(
+        ['config:app:set', $app, $key, '--value=' . $value, '--type=string'],
+        $internal ? ['--internal'] : [],
+        ['--no-interaction', '--no-warnings', '--no-ansi'],
+    ));
+}
+
 function removeTree(string $path): void
 {
     if (is_dir($path) && !is_link($path)) {
@@ -467,20 +483,20 @@ function applyOfficeConfig(): void
     [$code, , $stderr] = runOcc(['richdocuments:activate-config', '--wopi-url=' . $wopiUrlForAppConfig, '--callback-url=' . $callbackUrl, '--no-ansi']);
     logMessage("richdocuments:activate-config returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_url', '--value=' . $wopiDiscoveryUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = setAppString('richdocuments', 'wopi_url', $wopiDiscoveryUrl);
     logMessage("wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_callback_url', '--value=' . $callbackUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = setAppString('richdocuments', 'wopi_callback_url', $callbackUrl);
     logMessage("wopi_callback_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'public_wopi_url', '--value=' . $publicWopiUrl, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = setAppString('richdocuments', 'public_wopi_url', $publicWopiUrl);
     logMessage("public_wopi_url set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     // Only Collabora may fetch documents over WOPI. Without an allowlist any
     // host may, and Nextcloud Office warns; Collabora runs in a network of the
     // stack, so the private networks of Docker are the default.
     $wopiAllowlist = getenv('OFFICE_WOPI_ALLOWLIST') ?: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16';
-    [$code, , $stderr] = runOcc(['config:app:set', 'richdocuments', 'wopi_allowlist', '--value=' . $wopiAllowlist, '--type=string', '--internal', '--no-interaction', '--no-warnings', '--no-ansi']);
+    [$code, , $stderr] = setAppString('richdocuments', 'wopi_allowlist', $wopiAllowlist);
     logMessage("wopi_allowlist {$wopiAllowlist} set returned {$code}" . ($stderr ? " error: {$stderr}" : ''));
 
     logMessage('Office configuration applied');

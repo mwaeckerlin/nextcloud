@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-31 **1.1.21**
+    - Nextcloud 30 to 32 apply the WOPI addresses and the WOPI allowlist of Nextcloud Office at the start, so the admin overview no longer warns about a missing allowlist: the start confirmed the change with an option of `occ` that exists from Nextcloud 33 on, and Nextcloud 30 to 32 set nothing.
+    - The test of Nextcloud 30 and 31 checks the integrity of every signed app one by one: `occ integrity:check-app --all` exists from Nextcloud 32 on and stopped the test of 1.1.20.
+
 - 2026-10-31 **1.1.20**
     - Nextcloud 30 to 32 convert tables in an old row format at the start: the conversion read its list of tables with a call Nextcloud has from 33 on, stopped with an error, and the admin overview then warned about that error in the log.
 

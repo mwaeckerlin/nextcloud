@@ -459,8 +459,14 @@ collab_curl() {
 echo "[E2E] Checking the integrity of the release"
 CORE_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-core --no-warnings --output=json 2>&1) \
   || fail "integrity check of core fails: $CORE_CHECK"
-APP_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app --all --no-warnings --output=json 2>&1) \
-  || fail "integrity check of the apps fails: $APP_CHECK"
+# integrity:check-app --all exists from Nextcloud 32 on; the apps it checks,
+# those that carry a signature, are checked one by one on every version
+SIGNED_APPS=$(docker compose exec -T nextcloud-php-fpm php -r 'foreach (array_merge(glob("/app/apps/*/appinfo/signature.json"), glob("/app/custom_apps/*/appinfo/signature.json")) as $f) echo basename(dirname($f, 2)), "\n";')
+grep -qx files <<<"$SIGNED_APPS" || fail "the shipped app files carries no signature: $SIGNED_APPS"
+for app in $SIGNED_APPS; do
+  APP_CHECK=$(docker compose exec -T nextcloud-php-fpm php /app/occ integrity:check-app "$app" --no-warnings --output=json 2>&1) \
+    || fail "integrity check of the app $app fails: $APP_CHECK"
+done
 grep -q '"richdocuments"' <<<"$(docker compose exec -T nextcloud-php-fpm php /app/occ app:list --no-warnings --output=json)" \
   || fail "richdocuments is not installed, the check of an App Store app proves nothing"
 docker compose exec -T nextcloud-php-fpm php -r '
