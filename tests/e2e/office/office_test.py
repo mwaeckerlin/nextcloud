@@ -90,6 +90,18 @@ with sync_playwright() as playwright:
         frame.wait_for_selector('#modal-dialog-onboarding-tour-overlay', state='detached', timeout=10_000)
     except Exception:
         pass
+    # Nextcloud 30 and 31 greet the first login of a user with the first-run wizard
+    # over the whole page, which takes every click; close it as the user would
+    try:
+        page.wait_for_selector('#firstrunwizard', state='visible', timeout=10_000)
+    except Exception:
+        pass
+    else:
+        try:
+            page.click('#firstrunwizard button.modal-container__close', timeout=5_000)
+        except Exception:
+            page.keyboard.press('Escape')
+        page.wait_for_selector('#firstrunwizard', state='detached', timeout=10_000)
     page.wait_for_timeout(2000)
     canvas.click()
     page.keyboard.type(TEXT, delay=50)

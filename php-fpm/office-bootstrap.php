@@ -266,6 +266,12 @@ function installNextcloudIfNeeded(): void
         // connection, so only `occ status` tells whether it worked
         if (isInstalled()) {
             logMessage('Unattended installation completed');
+            // Nextcloud 33 enables its shipped app twofactor_totp when it is
+            // installed; 30 to 32 ship it disabled, and their admin overview
+            // warns that no second factor provider is available
+            if (is_dir('/app/apps/twofactor_totp')) {
+                logOcc('app:enable twofactor_totp', ['app:enable', 'twofactor_totp']);
+            }
             return;
         }
 

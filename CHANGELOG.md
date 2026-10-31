@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-31 **1.1.22**
+    - A new installation enables the shipped app `twofactor_totp`, as Nextcloud does from 33 on, so the admin overview of Nextcloud 30 to 32 no longer warns that no second factor provider is available; two-factor authentication stays optional.
+    - The office test of Nextcloud 30 and 31 closes the first-run wizard, which covers the page at the first login, before it types into the document.
+
 - 2026-10-31 **1.1.21**
     - Nextcloud 30 to 32 apply the WOPI addresses and the WOPI allowlist of Nextcloud Office at the start, so the admin overview no longer warns about a missing allowlist: the start confirmed the change with an option of `occ` that exists from Nextcloud 33 on, and Nextcloud 30 to 32 set nothing.
     - The test of Nextcloud 30 and 31 checks the integrity of every signed app one by one: `occ integrity:check-app --all` exists from Nextcloud 32 on and stopped the test of 1.1.20.
