@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Branch contract: which branches the workflow builds and which stay frozen.
+"""Branch contract: which branches the workflow builds.
 
 The scheduled run of the default branch starts `docker.yml` on every branch a
 rule of `branch-tags` matches (shared workflow of mwaeckerlin/scratch, matched
-in full with Python's re.fullmatch). Nextcloud 30 to 32 refuse PHP 8.5, which
-is the only PHP mwaeckerlin/php-fpm carries, and the test of the branch new
-installs Nextcloud, so the branches new-30 to new-32 must stay frozen; every
-other version branch must be built, so its image gets the PHP fixes of its
-base, the legacy branches 13 to 23 too, whose Nextcloud refuses that PHP.
+in full with Python's re.fullmatch). Every version branch must be built, so
+its image gets the PHP fixes of its base: new-30 to new-35, new-30 to new-32
+on the older PHP branches of mwaeckerlin/php-fpm, and the legacy branches 13
+to 35, those of 13 to 23 too, whose Nextcloud refuses the PHP of jammy. A
+branch that only resembles a version branch, such as new-29 or new-33-cve,
+matches no rule.
 Branch new-NN publishes nginx-ncNN and nginx-ncNN-vX.Y.Z, branch new nginx
 and nginx-vX.Y.Z, each also with the day of the build; no tag carries a
 version without its leading «v».
@@ -44,13 +45,13 @@ def tags(branch, tag, version='1.2.3', date='20261026'):
     named = named_version if base == 'latest' else f'{base}-{named_version}'
     return [base, date if base == 'latest' else f'{base}-{date}', named, f'{named}-{date}']
 
-built = {'new': '', **{f'new-{v}': f'-nc{v}' for v in range(33, 36)}, 'master': '', **{str(v): f'-{v}' for v in range(13, 36)}}
-frozen = [f'new-{v}' for v in range(30, 33)]
+built = {'new': '', **{f'new-{v}': f'-nc{v}' for v in range(30, 36)}, 'master': '', **{str(v): f'-{v}' for v in range(13, 36)}}
+unbuilt = ['new-29', 'new-33-cve', '12', '33-cve']
 # a version never stands without its leading «v»: nginx-v1.2.3, nginx-nc35-v1.2.3
 expected_tags = {
     'new': ['nginx', 'nginx-20261026', 'nginx-v1.2.3', 'nginx-v1.2.3-20261026'],
     **{f'new-{v}': [f'nginx-nc{v}', f'nginx-nc{v}-20261026', f'nginx-nc{v}-v1.2.3', f'nginx-nc{v}-v1.2.3-20261026']
-       for v in range(33, 36)},
+       for v in range(30, 36)},
     'master': ['latest', '20261026', 'v1.2.3', 'v1.2.3-20261026'],
 }
 
@@ -78,11 +79,11 @@ for branch in built:
     ok = any(fnmatch.fnmatchcase(branch, p) for p in patterns)
     failed += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  a push to {branch} starts the workflow" + ('' if ok else f', on.push.branches is {patterns}'))
-for branch in frozen:
+for branch in unbuilt:
     got = suffix(branch)
     ok = got is None
     failed += not ok
-    print(f"  {'PASS' if ok else 'FAIL'}  frozen {branch}" + ('' if ok else f' matches a rule (suffix {got!r})'))
+    print(f"  {'PASS' if ok else 'FAIL'}  {branch} is no version branch" + ('' if ok else f', matches a rule (suffix {got!r})'))
 # the build job pushes the architecture tags with `npm run deploy`, and the
 # deploy job joins every image of the compose file from them; an image the
 # script leaves out fails there with «<image>-<arch>: not found»
@@ -94,6 +95,6 @@ for name in images:
     ok = name in pushed
     failed += not ok
     print(f"  {'PASS' if ok else 'FAIL'}  deploy pushes {name}")
-total = 3 * len(built) + len(expected_tags) + len(frozen) + len(images)
+total = 3 * len(built) + len(expected_tags) + len(unbuilt) + len(images)
 print(f'==> Branch contract: {total - failed} passed, {failed} failed')
 sys.exit(1 if failed else 0)

@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.0.6**
+    - The workflow and the branch contract name `new-30` to `new-35` as built, as on `new`, where Nextcloud 30 to 32 run on PHP 8.3 and 8.4 again; the legacy image is unchanged.
+
 - 2026-10-31 **1.0.5**
     - The tags `13` to `23` are built again, on Ubuntu jammy, and deliver its patched PHP 8.1, the fix of CVE-2026-109618 and CVE-2026-109619 included. Nextcloud 13 to 23 refuse every PHP above 8.0 and do not start in them, as before, when they carried the PHP 8.3 of noble.
 
