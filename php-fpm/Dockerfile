@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.6
+# create-branches.sh names an older PHP branch for a Nextcloud that refuses the current one
+ARG PHP_FPM_IMAGE="mwaeckerlin/php-fpm"
 FROM mwaeckerlin/build AS build
 ARG SOURCE_FILE="latest.tar.bz2"
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE} /tmp/${SOURCE_FILE}
@@ -23,13 +25,13 @@ RUN mkdir -p /legacy/var/www && ln -s /app /legacy/var/www/nextcloud
 # signs core and the shipped apps with a CA of the build beside the Nextcloud
 # CA; the image has no shell, so the steps run in exec form, as root of this
 # stage only, which writes the release that the build stage owns
-FROM mwaeckerlin/php-fpm AS sign
+FROM ${PHP_FPM_IMAGE} AS sign
 USER 0
 COPY --from=build /app /app
 COPY sign-release.php /usr/local/bin/sign-release.php
 RUN ["/usr/bin/php", "/usr/local/bin/sign-release.php", "/app"]
 
-FROM mwaeckerlin/php-fpm AS production
+FROM ${PHP_FPM_IMAGE} AS production
 # the variables of the legacy image, with its names and defaults
 ENV MEMORY_LIMIT "1000M"
 ENV UPLOAD_MAX_FILESIZE "8G"

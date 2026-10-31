@@ -102,8 +102,9 @@ services:
       - php-collabora
 
   nextcloud-db:
-    # the newest MariaDB that Nextcloud 33 to 35 support; with a newer one
-    # the admin overview warns about the database version
+    # the newest MariaDB that Nextcloud 32 to 35 support; with a newer one
+    # the admin overview warns about the database version, and
+    # create-branches.sh sets 11.4 for Nextcloud 30 and 31
     image: mariadb:11.8
     # 96M of the image are below the 128M the database checks of the admin
     # overview ask for; 256M is the value they recommend
