@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-10-31 **1.1.16**
+    - The workflow and the branch contract name the legacy branches `13` to `35` as built, as on `master`, where they now get the PHP fixes of Ubuntu; the images of this branch are unchanged.
+
 - 2026-10-26 **1.1.15**
     - Every published version carries a leading `v`, and the images of a Nextcloud major version carry `nc` before it: branch `new-35` publishes `nginx-nc35`, `nginx-nc35-v1.1.15` and both with the date, branch `new` `nginx`, `nginx-v1.1.15` and both with the date, `master` `latest`, `v1.0.1` and both with the date. The tags `nginx-35`, `nginx-35-1.1.14` and their like stay published and are no longer rebuilt.
     - A push to `new` rebuilds `new-33` to `new-35` from the pushed commit, so every Nextcloud major version publishes the version just pushed; until now only the hourly check started them, with the code of their last regeneration.

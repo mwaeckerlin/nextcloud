@@ -12,10 +12,11 @@
 # A push to new also rebuilds new-33 to new-35: once its images are deployed,
 # the shared workflow runs create-branches.sh on the pushed commit and builds
 # every branch it pushed, so each major version publishes the version just
-# pushed; that push needs «contents: write».
-# The branches 13 to 29 and new-30 to new-32 are frozen: their tags stay as
-# published. Nextcloud 30 to 32 refuse PHP 8.5, the only PHP of
-# mwaeckerlin/php-fpm; installations on them upgrade over the legacy tags.
+# pushed; that push needs «contents: write». A push to master rebuilds the
+# legacy branches 13 to 35 the same way.
+# The branches new-30 to new-32 are frozen: their tags stay as published.
+# Nextcloud 30 to 32 refuse PHP 8.5, the only PHP of mwaeckerlin/php-fpm;
+# installations on them upgrade over the legacy tags.
 #
 # Every rule carries «version»: a published version never stands without its
 # leading «v», so the tags read nginx-v1.1.15 and nginx-nc35-v1.1.15, the same
@@ -26,7 +27,7 @@ name: docker
 
 on:
   push:
-    branches: [master, new, "new-*", "3[0-9]"]
+    branches: [master, new, "new-*", "1[3-9]", "2[0-9]", "3[0-9]"]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -48,5 +49,5 @@ jobs:
     with:
       version-base: new
       version-branches: ./create-branches.sh
-      branch-tags: '[{"branch": "new-(3[3-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
+      branch-tags: '[{"branch": "new-(3[3-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(1[3-9]|2[0-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
     secrets: inherit
