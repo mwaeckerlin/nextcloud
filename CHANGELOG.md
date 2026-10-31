@@ -1,5 +1,10 @@
 # Changelog
 
+- 2026-10-31 **1.0.7**
+    - Every tag of the legacy image is also published for arm64, as `mwaeckerlin/ubuntu-base:jammy` and `:noble` are.
+    - The image no longer carries the package lists of apt, about 15 files of the Ubuntu archive: the cleanup after the installation called a step the base image does not define and removed nothing.
+    - The build prints no warnings: the signature of the Nextcloud download is checked with `gpgv` against the shipped key, the man pages of `php` and `phar` stay installed so that `update-alternatives` finds them, and the image is written with the current forms of `ENV` and `chown`.
+
 - 2026-10-31 **1.0.6**
     - The workflow and the branch contract name `new-30` to `new-35` as built, as on `new`, where Nextcloud 30 to 32 run on PHP 8.3 and 8.4 again; the legacy image is unchanged.
 

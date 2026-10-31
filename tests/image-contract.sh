@@ -59,6 +59,14 @@ else
         _fail "apache2" "/usr/sbin/apache2 does not run"
     fi
 
+    # the installation removes the package lists of apt again
+    lists=$(_run /usr/bin/find "${image}" /var/lib/apt/lists -type f)
+    if [[ -z "${lists}" ]]; then
+        _pass "apt_lists_removed"
+    else
+        _fail "apt_lists_removed" "$(wc -l <<< "${lists}") files left in /var/lib/apt/lists"
+    fi
+
     if _run /usr/bin/test "${image}" -x /start.sh; then
         _pass "start_script"
     else

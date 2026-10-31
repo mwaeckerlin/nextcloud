@@ -2,24 +2,24 @@ ARG VERSION="noble"
 FROM mwaeckerlin/ubuntu-base:${VERSION} AS production
 
 EXPOSE 80
-ENV MEMORY_LIMIT "1000M"
-ENV UPLOAD_MAX_FILESIZE "8G"
-ENV MAX_INPUT_TIME "3600"
-ENV WEBROOT ""
-ENV ADMIN_USER ""
-ENV ADMIN_PWD ""
-ENV HOST ""
-ENV PROTOCOL "https"
-ENV DEBUG "0"
-ENV MAX_REQUEST_WORKERS "100"
+ENV MEMORY_LIMIT="1000M"
+ENV UPLOAD_MAX_FILESIZE="8G"
+ENV MAX_INPUT_TIME="3600"
+ENV WEBROOT=""
+ENV ADMIN_USER=""
+ENV ADMIN_PWD=""
+ENV HOST=""
+ENV PROTOCOL="https"
+ENV DEBUG="0"
+ENV MAX_REQUEST_WORKERS="100"
 
 # compile time variables
-ENV CONTAINERNAME "nextcloud"
-ENV INSTBASE "/var/www"
-ENV INSTDIR "${INSTBASE}/nextcloud"
-ENV DATADIR "${INSTDIR}/data"
-ENV CONFDIR "${INSTDIR}/config"
-ENV APPSDIR "${INSTDIR}/apps"
+ENV CONTAINERNAME="nextcloud"
+ENV INSTBASE="/var/www"
+ENV INSTDIR="${INSTBASE}/nextcloud"
+ENV DATADIR="${INSTDIR}/data"
+ENV CONFDIR="${INSTDIR}/config"
+ENV APPSDIR="${INSTDIR}/apps"
 ENV SOURCE_FILE="latest.tar.bz2"
 ENV SOURCE="https://download.nextcloud.com/server/releases/${SOURCE_FILE}"
 WORKDIR /tmp
@@ -34,6 +34,10 @@ ADD nextcloud.conf /nextcloud.conf
 # Package installation and writes under /var require root privileges.
 USER root
 
+# the base image leaves out every man page, so update-alternatives warns about
+# the missing pages of the php, phar and phar.phar links; these three stay
+RUN printf '%s\n' 'path-include=/usr/share/man/man1/php*' 'path-include=/usr/share/man/man1/phar*' > /etc/dpkg/dpkg.cfg.d/zz-php-man
+
 # libmagickcore-extra php-mcrypt
 RUN apt-get update \
       && apt-get install --no-install-recommends --no-install-suggests -y \
@@ -41,15 +45,16 @@ RUN apt-get update \
       php-json php-mysql php-curl php-mbstring php-intl \
       php-imagick php-xml php-zip php-apcu php-ldap \
       rsync php-imagick wget cron mysql-client php-bcmath php-gmp \
-      && bash -c "$CLEANUP" \
+      && apt-get clean \
+      && rm -rf /var/lib/apt/lists/* \
       && mkdir -p "${INSTDIR}" \
       && wget -qO${SOURCE_FILE} ${SOURCE} \
       && wget -qO${SOURCE_FILE}.asc ${SOURCE}.asc \
-      && gpg --import /nextcloud.asc \
-      && gpg --verify ${SOURCE_FILE}.asc ${SOURCE_FILE} \
+      && gpg --dearmor < /nextcloud.asc > /tmp/nextcloud.gpg \
+      && gpgv --keyring /tmp/nextcloud.gpg ${SOURCE_FILE}.asc ${SOURCE_FILE} \
       && cd "${INSTBASE}" \
       && tar xf /tmp/${SOURCE_FILE} \
-      && rm /tmp/${SOURCE_FILE} /tmp/${SOURCE_FILE}.asc /nextcloud.asc \
+      && rm /tmp/${SOURCE_FILE} /tmp/${SOURCE_FILE}.asc /tmp/nextcloud.gpg /nextcloud.asc \
       && cd "${INSTDIR}" \
       && chmod +x occ \
       && mkdir data \
@@ -57,7 +62,7 @@ RUN apt-get update \
       && mv $APPSDIR ${APPSDIR}.original \
       && mkdir $APPSDIR \
       && touch /etc/apache2/conf-available/nextcloud.conf \
-      && chown -R www-data.www-data $APPSDIR ${APPSDIR}.original $CONFDIR $DATADIR ${INSTDIR}/.htaccess /etc/apache2/conf-available/nextcloud.conf \
+      && chown -R www-data:www-data $APPSDIR ${APPSDIR}.original $CONFDIR $DATADIR ${INSTDIR}/.htaccess /etc/apache2/conf-available/nextcloud.conf \
       && ln -sf /proc/1/fd/1 /var/log/apache2/access.log \
       && ln -sf /proc/1/fd/2 /var/log/apache2/error.log \
       && ln -sf /proc/1/fd/1 /var/log/nextcloud.log

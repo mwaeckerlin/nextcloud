@@ -1,4 +1,4 @@
-# Builds the legacy image of this repository for amd64 and publishes it
+# Builds the legacy image of this repository for amd64 and arm64 and publishes it
 # on Docker Hub, on every push to a live branch, and in the hourly check when a
 # parent image or a download changed or the image is a week old. The build itself is the reusable workflow
 # docker-image.yml of mwaeckerlin/scratch; its README explains the setup.
@@ -46,9 +46,6 @@ jobs:
       actions: write
       contents: write
     with:
-      # the legacy line builds on mwaeckerlin/ubuntu-base:noble and :jammy,
-      # which exist for amd64 only
-      architectures: '["amd64"]'
       version-base: master
       version-branches: ./create-branches.sh
       branch-tags: '[{"branch": "new-(3[0-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(1[3-9]|2[0-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'

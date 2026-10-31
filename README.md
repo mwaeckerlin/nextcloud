@@ -130,4 +130,4 @@ Branch `master` publishes `latest`, branch `NN` the tag `NN` with Nextcloud majo
 
 The tags `13` to `23` deliver the patched PHP 8.1 of jammy, and Nextcloud does not start in them: Nextcloud 13 to 23 refuse every PHP above 8.0, and no Ubuntu release with security updates carries such a PHP. `24` is the first tag in which Nextcloud starts.
 
-The Ubuntu release is pinned in `ARG VERSION`: `jammy` with PHP 8.1 up to Nextcloud 30, `noble` from 31, because the `tar` of Ubuntu 26.04 fails on the old Docker Hub build servers. Both base tags exist for amd64 only, so the legacy image is built for amd64 only.
+The Ubuntu release is pinned in `ARG VERSION`: `jammy` with PHP 8.1 up to Nextcloud 30, `noble` from 31, because the `tar` of Ubuntu 26.04 fails on the old Docker Hub build servers. Both base tags exist for amd64 and arm64, and so does every tag of the legacy image.
