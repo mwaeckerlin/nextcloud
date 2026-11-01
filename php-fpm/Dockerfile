@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.6
 # create-branches.sh names an older PHP branch for a Nextcloud that refuses the current one
-ARG PHP_FPM_IMAGE="mwaeckerlin/php-fpm"
+ARG PHP_FPM_IMAGE="mwaeckerlin/php-fpm:8.4"
 FROM mwaeckerlin/build AS build
-ARG SOURCE_FILE="latest.tar.bz2"
+ARG SOURCE_FILE="latest-32.tar.bz2"
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE} /tmp/${SOURCE_FILE}
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}.asc
 ADD --chmod=644 nextcloud.asc /tmp/nextcloud.asc
