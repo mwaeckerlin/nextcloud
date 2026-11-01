@@ -6,7 +6,7 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 
 `tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does; the weekly run of `master` starts the workflow on every branch a rule matches.
 
-- **F2** `13` to `35`, `new` and `new-30` to `new-35` are built with their suffix, and a push to each of them starts the workflow; `new-29`, `new-33-cve`, `12` and `33-cve` match no rule.
+- **F2** `13` to `35`, `new` and `new-30` to `new-35` are built with their suffix, `new-NN` with `-ncNN` and, from the same rule, once more with `-NN`, and a push to each of them starts the workflow; `new-29`, `new-33-cve`, `12` and `33-cve` match no rule.
 
 ## Image contract
 

@@ -43,14 +43,23 @@ def tags(branch, tag, version='1.2.3', date='20261026'):
     end = found.expand(rule['suffix']) if found else ''
     base = tag + end if tag != 'latest' else (end.lstrip('-') or 'latest')
     named = named_version if base == 'latest' else f'{base}-{named_version}'
-    return [base, date if base == 'latest' else f'{base}-{date}', named, f'{named}-{date}']
+    result = [base, date if base == 'latest' else f'{base}-{date}', named, f'{named}-{date}']
+    # every alias publishes the same image once more with its suffix in place of the suffix
+    for alias in (rule or {}).get('aliases', []):
+        alias_base = tag + found.expand(alias)
+        alias_named = f'{alias_base}-{named_version}'
+        result += [alias_base, f'{alias_base}-{date}', alias_named, f'{alias_named}-{date}']
+    return result
 
 built = {'new': '', **{f'new-{v}': f'-nc{v}' for v in range(30, 36)}, 'master': '', **{str(v): f'-{v}' for v in range(13, 36)}}
 unbuilt = ['new-29', 'new-33-cve', '12', '33-cve']
 # a version never stands without its leading «v»: nginx-v1.2.3, nginx-nc35-v1.2.3
 expected_tags = {
     'new': ['nginx', 'nginx-20261026', 'nginx-v1.2.3', 'nginx-v1.2.3-20261026'],
-    **{f'new-{v}': [f'nginx-nc{v}', f'nginx-nc{v}-20261026', f'nginx-nc{v}-v1.2.3', f'nginx-nc{v}-v1.2.3-20261026']
+    # the names before nc stay an alias of the same build, so whoever pulls
+    # php-fpm-35 gets the image of new-35 with its PHP
+    **{f'new-{v}': [f'nginx-nc{v}', f'nginx-nc{v}-20261026', f'nginx-nc{v}-v1.2.3', f'nginx-nc{v}-v1.2.3-20261026',
+                    f'nginx-{v}', f'nginx-{v}-20261026', f'nginx-{v}-v1.2.3', f'nginx-{v}-v1.2.3-20261026']
        for v in range(30, 36)},
     'master': ['latest', '20261026', 'v1.2.3', 'v1.2.3-20261026'],
 }

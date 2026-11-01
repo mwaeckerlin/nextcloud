@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-11-01 **1.0.8**
+    - The workflow and the branch contract name the second names of `new-30` to `new-35`, `nginx-30` and `php-fpm-30` beside `nginx-nc30` and `php-fpm-nc30`, as on `new`; the legacy image is unchanged.
+
 - 2026-10-31 **1.0.7**
     - Every tag of the legacy image is also published for arm64, as `mwaeckerlin/ubuntu-base:jammy` and `:noble` are.
     - The image no longer carries the package lists of apt, about 15 files of the Ubuntu archive: the cleanup after the installation called a step the base image does not define and removed nothing.
