@@ -40,7 +40,7 @@ Register of all tests, sorted by the [FEATURES.md](FEATURES.md) number each test
 `tests/branch-rules.py`, run by `npm run test:branches`, applies the `branch-tags` rules of `.github/workflows/docker.yml` the way the shared workflow does, and reads the script `deploy` of `package.json`.
 
 - **F5** `new`, `new-30` to `new-35`, `master` and `13` to `35` are built with their suffix, `new-NN` with `-ncNN`, and a push to each of them starts the workflow; `new-29`, `new-33-cve`, `12` and `33-cve` match no rule.
-- **F6** `new` publishes `nginx`, `nginx-<date>`, `nginx-vX.Y.Z` and `nginx-vX.Y.Z-<date>`, `new-NN` the same with `-ncNN` after `nginx`, `master` `latest`, `<date>`, `vX.Y.Z` and `vX.Y.Z-<date>`; no live branch publishes a version without its leading `v`. Against the rules of version 1.1.14 the same test fails 20 times.
+- **F6** `new` publishes `nginx`, `nginx-<date>`, `nginx-vX.Y.Z` and `nginx-vX.Y.Z-<date>`, `new-NN` the same with `-ncNN` after `nginx` and, from the same rule and so from the same build, once more with `-NN`, the name before `nc`, `master` `latest`, `<date>`, `vX.Y.Z` and `vX.Y.Z-<date>`; no live branch publishes a version without its leading `v`. Against the rules of version 1.1.14 the same test fails 20 times.
 - **F5** `mwaeckerlin/scratch` › `tests/workflow-contract.sh` versions_builds_every_branch_the_command_moved: a push of `new` runs `create-branches.sh` with the pushed commit and builds every version branch it pushed.
 - **F6** `deploy` pushes every service of `docker-compose.yml` with `build` and `image`, so the workflow finds each image under its architecture tag when it joins them.
 

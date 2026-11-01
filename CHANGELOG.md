@@ -1,5 +1,8 @@
 # Changelog
 
+- 2026-11-01 **1.1.26**
+    - The names without `nc`, `nginx-30` to `nginx-35`, `php-fpm-30` to `php-fpm-35` and `notify-push-30` to `notify-push-35`, are published by `new-30` to `new-35` once more, as the same build as `nginx-nc30` and the others: `php-fpm-30` to `php-fpm-32` carried PHP 8.5.9 of September and now carry the patched PHP 8.3 and 8.4, and every name receives each rebuild.
+
 - 2026-10-31 **1.1.25**
     - The test of Nextcloud 31 converts an office file to a preview itself, so the error richdocuments 31 writes into the log on every such preview appears on every run; the warning «Errors in the log» counts as known only while every error in the log is that one, and the test prints the entries it found.
 

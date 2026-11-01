@@ -7,6 +7,7 @@
 # its own branch and its own tags. The same file stands on every live branch:
 #   new      -> nginx, php-fpm                 (current release)
 #   new-NN   -> nginx-ncNN, php-fpm-ncNN       (major version NN, from 30)
+#               and nginx-NN, php-fpm-NN       (alias: the names before nc)
 #   master   -> latest                         (legacy single image)
 #   NN       -> NN                             (legacy, major version NN)
 # A push to new also rebuilds new-30 to new-35: once its images are deployed,
@@ -48,5 +49,5 @@ jobs:
     with:
       version-base: new
       version-branches: ./create-branches.sh
-      branch-tags: '[{"branch": "new-(3[0-9])", "suffix": "-nc\\1", "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(1[3-9]|2[0-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
+      branch-tags: '[{"branch": "new-(3[0-9])", "suffix": "-nc\\1", "aliases": ["-\\1"], "version": "v"}, {"branch": "new", "suffix": "", "version": "v"}, {"branch": "(1[3-9]|2[0-9]|3[0-9])", "suffix": "-\\1", "version": "v"}, {"branch": "master", "suffix": "", "version": "v"}]'
     secrets: inherit
