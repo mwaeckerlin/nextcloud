@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 FROM mwaeckerlin/build AS build
-ARG SOURCE_FILE="latest.tar.bz2"
+ARG SOURCE_FILE="latest-34.tar.bz2"
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE} /tmp/${SOURCE_FILE}
 ADD --chmod=644 https://download.nextcloud.com/server/releases/${SOURCE_FILE}.asc /tmp/${SOURCE_FILE}.asc
 ADD --chmod=644 nextcloud.asc /tmp/nextcloud.asc
